@@ -68,15 +68,31 @@ contract CreditScore is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, Ownabl
             euint32 added = TFHE.add(current, delta);
             updated = TFHE.min(added, TFHE.asEuint32(MAX_SCORE));
         } else {
-            // Protect against underflow: if current < delta, result should be MIN_SCORE
+            // Use TFHE.select to avoid underflow: if delta > current, clamp to MIN_SCORE
+            ebool underflows = TFHE.gt(delta, current);
             euint32 subtracted = TFHE.sub(current, delta);
-            updated = TFHE.max(subtracted, TFHE.asEuint32(MIN_SCORE));
+            euint32 safeResult = TFHE.max(subtracted, TFHE.asEuint32(MIN_SCORE));
+            updated = TFHE.select(underflows, TFHE.asEuint32(MIN_SCORE), safeResult);
         }
 
         _scores[borrower] = updated;
         _allowScore(borrower);
 
         emit ScoreUpdated(borrower, positive);
+    }
+
+    /// @notice Penalize a borrower's score by a plaintext amount (only lending contract, on liquidation)
+    /// @dev Uses plaintext delta to avoid requiring oracle signature in liquidation path
+    function penalizeScore(address borrower, uint32 penaltyPoints) external {
+        require(msg.sender == lendingContract, "CreditScore: only lending contract");
+        require(initialized[borrower], "CreditScore: not initialized");
+
+        euint32 penalty = TFHE.asEuint32(penaltyPoints);
+        euint32 subtracted = TFHE.sub(_scores[borrower], penalty);
+        _scores[borrower] = TFHE.max(subtracted, TFHE.asEuint32(MIN_SCORE));
+        _allowScore(borrower);
+
+        emit ScoreUpdated(borrower, false);
     }
 
     /// @notice Check whether a borrower's score meets a minimum threshold

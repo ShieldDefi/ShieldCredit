@@ -47,7 +47,7 @@ ShieldCredit solves this using Zama's Fully Homomorphic Encryption (FHE) coproce
 
 ```bash
 # Clone and install
-git clone https://github.com/ShieldDefi/ShieldRemit.git
+git clone https://github.com/ShieldDefi/ShieldCredit.git
 cd ShieldRemit
 npm install
 

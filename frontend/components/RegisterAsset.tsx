@@ -26,7 +26,7 @@ export default function RegisterAsset() {
       const inst = await getOrCreateFhevmInstance(provider);
 
       const faceValueMicro = BigInt(Math.round(parseFloat(faceValue) * 1_000_000));
-      const { handles, inputProof } = await encryptAmount(
+      const { handle, inputProof } = await encryptAmount(
         inst,
         await contracts.rwaRegistry.getAddress(),
         address,
@@ -34,7 +34,7 @@ export default function RegisterAsset() {
       );
 
       const tx = await contracts.rwaRegistry.registerAsset(
-        handles[0],
+        handle,
         inputProof,
         assetType,
         metadataURI

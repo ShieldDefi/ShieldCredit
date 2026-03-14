@@ -24,7 +24,7 @@ export default function RequestLoan() {
 
       const lendingAddress = await contracts.privateLending.getAddress();
       const loanAmountMicro = BigInt(Math.round(parseFloat(loanAmount) * 1_000_000));
-      const { handles, inputProof } = await encryptAmount(
+      const { handle, inputProof } = await encryptAmount(
         inst,
         lendingAddress,
         address,
@@ -33,7 +33,7 @@ export default function RequestLoan() {
 
       const tx = await contracts.privateLending.requestLoan(
         BigInt(assetId),
-        handles[0],
+        handle,
         inputProof
       );
       const receipt = await tx.wait();

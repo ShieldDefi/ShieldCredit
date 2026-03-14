@@ -121,9 +121,9 @@ export default function LoanDashboard() {
       const lendingAddress = ADDRESSES.privateLending;
 
       const amountMicro = BigInt(Math.round(parseFloat(amount) * 1_000_000));
-      const { handles, inputProof } = await encryptAmount(inst, lendingAddress, address, amountMicro);
+      const { handle, inputProof } = await encryptAmount(inst, lendingAddress, address, amountMicro);
 
-      const tx = await contracts.privateLending.repayLoan(loanId, handles[0], inputProof);
+      const tx = await contracts.privateLending.repayLoan(loanId, handle, inputProof);
       await tx.wait();
       await loadLoans();
     } catch (err: unknown) {

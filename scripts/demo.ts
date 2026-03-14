@@ -1,5 +1,5 @@
 import { ethers, network } from "hardhat";
-import { createInstance } from "fhevmjs";
+import { createInstance } from "fhevmjs/node";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -24,7 +24,12 @@ async function main() {
 
   // 2. Init fhevmjs instance
   const chainId = (await ethers.provider.getNetwork()).chainId;
-  const instance = await createInstance({ chainId: Number(chainId) });
+  // Use Sepolia fhEVM contract addresses (required by fhevmjs v0.6.x)
+  const instance = await createInstance({
+    kmsContractAddress: "0x9D6891A6240D6130c54ae243d8005063D05fE14b",
+    aclContractAddress: "0xFee8407e2f5e3Ee68ad77cAE98c434e637f516e5",
+    chainId: Number(chainId),
+  });
   console.log("fhevmjs instance created for chainId:", chainId);
 
   // Get contract factories
@@ -43,7 +48,7 @@ async function main() {
   const { handles: fvHandles, inputProof: fvProof } = await faceValueInput.encrypt();
 
   const registerTx = await rwaRegistry.registerAsset(
-    fvHandles[0],
+    "0x" + Buffer.from(fvHandles[0]).toString("hex").padStart(64, "0"),
     fvProof,
     0, // TREASURY_BOND
     "ipfs://QmAssetMetadata"
@@ -61,7 +66,11 @@ async function main() {
   loanInput.add64(6_000_000n);
   const { handles: loanHandles, inputProof: loanProof } = await loanInput.encrypt();
 
-  const loanTx = await privateLending.requestLoan(assetId, loanHandles[0], loanProof);
+  const loanTx = await privateLending.requestLoan(
+    assetId,
+    "0x" + Buffer.from(loanHandles[0]).toString("hex").padStart(64, "0"),
+    loanProof
+  );
   const loanReceipt = await loanTx.wait();
   const loanEvent = loanReceipt?.logs.find((log: any) => log.fragment?.name === "LoanCreated");
   const loanId = (loanEvent as any)?.args?.[0] ?? 0n;
@@ -102,7 +111,11 @@ async function main() {
   repayInput.add64(3_000_000n);
   const { handles: repayHandles, inputProof: repayProof } = await repayInput.encrypt();
 
-  const repayTx = await privateLending.repayLoan(loanId, repayHandles[0], repayProof);
+  const repayTx = await privateLending.repayLoan(
+    loanId,
+    "0x" + Buffer.from(repayHandles[0]).toString("hex").padStart(64, "0"),
+    repayProof
+  );
   await repayTx.wait();
   console.log("Partial repayment of 3,000,000 processed");
 

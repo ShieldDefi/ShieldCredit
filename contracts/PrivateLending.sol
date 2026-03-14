@@ -236,17 +236,16 @@ contract PrivateLending is
 
         if (shouldLiquidate) {
             Loan storage loan = _loans[loanId];
+            address borrower = loan.borrower;
             loan.status = LoanStatus.LIQUIDATED;
 
-            rwaRegistry.unlockAsset(loan.assetId);
-            rwaRegistry.transferAsset(loan.assetId, address(this));
+            // liquidationTransfer atomically unlocks and transfers ownership to this contract
+            rwaRegistry.liquidationTransfer(loan.assetId, address(this));
 
-            // Penalize credit score (delta = 50 points, encoded as euint32)
-            euint32 penaltyDelta = TFHE.asEuint32(50);
-            TFHE.allow(penaltyDelta, address(creditScore));
-            TFHE.allowThis(penaltyDelta);
+            // Penalize credit score via the lending-contract privileged path
+            creditScore.penalizeScore(borrower, 50);
 
-            emit LoanLiquidated(loanId, loan.borrower);
+            emit LoanLiquidated(loanId, borrower);
         }
     }
 

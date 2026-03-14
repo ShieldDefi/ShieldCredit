@@ -2,7 +2,12 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { RWARegistry } from "../typechain-types";
-import { getFhevmInstance, encryptUint64, reencryptAndDecrypt } from "./helpers/fhevm-test-helpers";
+import {
+  getFhevmInstance,
+  encryptUint64,
+  reencryptAndDecrypt,
+  handleToBytes32,
+} from "./helpers/fhevm-test-helpers";
 import type { FhevmInstance } from "fhevmjs/node";
 
 describe("RWARegistry", function () {
@@ -19,7 +24,7 @@ describe("RWARegistry", function () {
     [owner, auditor, issuer, nonIssuer, lendingContract] = await ethers.getSigners();
 
     const RWARegistryFactory = await ethers.getContractFactory("RWARegistry");
-    rwaRegistry = (await RWARegistryFactory.deploy()) as RWARegistry;
+    rwaRegistry = (await RWARegistryFactory.deploy()) as unknown as RWARegistry;
     await rwaRegistry.waitForDeployment();
     registryAddress = await rwaRegistry.getAddress();
 
@@ -38,7 +43,7 @@ describe("RWARegistry", function () {
         1_000_000n
       );
       await expect(
-        rwaRegistry.connect(nonIssuer).registerAsset(handles[0], inputProof, 0, "ipfs://test")
+        rwaRegistry.connect(nonIssuer).registerAsset(handleToBytes32(handles[0]), inputProof, 0, "ipfs://test")
       ).to.be.revertedWith("RWARegistry: issuer not whitelisted");
     });
 
@@ -50,7 +55,7 @@ describe("RWARegistry", function () {
         1_000_000n
       );
       await expect(
-        rwaRegistry.connect(issuer).registerAsset(handles[0], inputProof, 0, "ipfs://metadata1")
+        rwaRegistry.connect(issuer).registerAsset(handleToBytes32(handles[0]), inputProof, 0, "ipfs://metadata1")
       )
         .to.emit(rwaRegistry, "AssetRegistered")
         .withArgs(0n, issuer.address, 0);
@@ -66,7 +71,7 @@ describe("RWARegistry", function () {
         issuer.address,
         5_000_000n
       );
-      await rwaRegistry.connect(issuer).registerAsset(handles[0], inputProof, 1, "ipfs://bond");
+      await rwaRegistry.connect(issuer).registerAsset(handleToBytes32(handles[0]), inputProof, 1, "ipfs://bond");
 
       // Owner can get the face value handle
       const fvHandle = await rwaRegistry.connect(issuer).getFaceValue(0n);
@@ -89,7 +94,7 @@ describe("RWARegistry", function () {
         issuer.address,
         1_000_000n
       );
-      await rwaRegistry.connect(issuer).registerAsset(handles[0], inputProof, 0, "ipfs://t");
+      await rwaRegistry.connect(issuer).registerAsset(handleToBytes32(handles[0]), inputProof, 0, "ipfs://t");
 
       await expect(
         rwaRegistry.connect(nonIssuer).getFaceValue(0n)
@@ -103,7 +108,7 @@ describe("RWARegistry", function () {
         issuer.address,
         2_000_000n
       );
-      await rwaRegistry.connect(issuer).registerAsset(handles[0], inputProof, 2, "ipfs://re");
+      await rwaRegistry.connect(issuer).registerAsset(handleToBytes32(handles[0]), inputProof, 2, "ipfs://re");
 
       const fvHandle = await rwaRegistry.connect(auditor).getFaceValue(0n);
       expect(fvHandle).to.not.equal(0n);
@@ -130,7 +135,7 @@ describe("RWARegistry", function () {
       );
       const tx = await rwaRegistry
         .connect(issuer)
-        .registerAsset(handles[0], inputProof, 0, "ipfs://lock-test");
+        .registerAsset(handleToBytes32(handles[0]), inputProof, 0, "ipfs://lock-test");
       const receipt = await tx.wait();
       const event = receipt?.logs.find((l: any) => l.fragment?.name === "AssetRegistered");
       assetId = (event as any)?.args?.[0] ?? 0n;
@@ -165,7 +170,7 @@ describe("RWARegistry", function () {
         issuer.address,
         3_000_000n
       );
-      await rwaRegistry.connect(issuer).registerAsset(handles[0], inputProof, 3, "ipfs://eq");
+      await rwaRegistry.connect(issuer).registerAsset(handleToBytes32(handles[0]), inputProof, 3, "ipfs://eq");
       await expect(rwaRegistry.connect(issuer).transferAsset(0n, nonIssuer.address))
         .to.emit(rwaRegistry, "AssetTransferred")
         .withArgs(0n, issuer.address, nonIssuer.address);

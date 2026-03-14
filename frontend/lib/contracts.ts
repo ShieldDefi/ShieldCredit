@@ -2,7 +2,7 @@ import { BrowserProvider, JsonRpcSigner, Contract } from "ethers";
 
 // ABIs — minimal ABIs for the contracts we need
 const RWA_REGISTRY_ABI = [
-  "function registerAsset(bytes encryptedFaceValue, bytes inputProof, uint8 assetType, string metadataURI) external returns (uint256)",
+  "function registerAsset(bytes32 encryptedFaceValue, bytes inputProof, uint8 assetType, string metadataURI) external returns (uint256)",
   "function transferAsset(uint256 assetId, address newOwner) external",
   "function lockAsset(uint256 assetId, address lendingContract) external",
   "function unlockAsset(uint256 assetId) external",
@@ -20,12 +20,12 @@ const CREDIT_SCORE_ABI = [
   "function getEncryptedScore(address borrower) external view returns (uint256)",
   "function isEligible(address borrower, uint32 minimum) external returns (uint256)",
   "function initializeScore(address borrower) external",
-  "function updateScore(address borrower, bytes encryptedDelta, bytes inputProof, bool positive) external",
+  "function updateScore(address borrower, bytes32 encryptedDelta, bytes inputProof, bool positive) external",
 ];
 
 const PRIVATE_LENDING_ABI = [
-  "function requestLoan(uint256 assetId, bytes encryptedLoanAmount, bytes inputProof) external returns (uint256)",
-  "function repayLoan(uint256 loanId, bytes encryptedAmount, bytes inputProof) external",
+  "function requestLoan(uint256 assetId, bytes32 encryptedLoanAmount, bytes inputProof) external returns (uint256)",
+  "function repayLoan(uint256 loanId, bytes32 encryptedAmount, bytes inputProof) external",
   "function checkAndLiquidate(uint256 loanId) external",
   "function accrueInterest(uint256 loanId) external",
   "function getLoanStatus(uint256 loanId) external view returns (uint8)",
@@ -42,7 +42,7 @@ const PRIVATE_LENDING_ABI = [
 const STABLECOIN_ABI = [
   "function balanceOf(address account) external view returns (uint256)",
   "function totalSupply() external view returns (uint256)",
-  "function transfer(address to, bytes encryptedAmount, bytes inputProof) external",
+  "function transfer(address to, bytes32 encryptedAmount, bytes inputProof) external",
   "function name() external view returns (string)",
   "function symbol() external view returns (string)",
   "function decimals() external view returns (uint8)",

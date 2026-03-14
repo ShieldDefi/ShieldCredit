@@ -107,7 +107,29 @@ contract RWARegistry is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, Ownabl
         emit AssetTransferred(assetId, previousOwner, newOwner);
     }
 
-    /// @notice Lock an asset as collateral for a lending contract
+    /// @notice Transfer asset after liquidation — can only be called by the locker (lending contract)
+    /// @dev Used during liquidation to take custody of collateral without requiring borrower signature
+    function liquidationTransfer(uint256 assetId, address newOwner) external nonReentrant {
+        Asset storage asset = _assets[assetId];
+        require(asset.lockedBy == msg.sender, "RWARegistry: only locker can liquidation-transfer");
+        require(asset.locked, "RWARegistry: asset not locked");
+        require(newOwner != address(0), "RWARegistry: zero address");
+
+        address previousOwner = asset.owner;
+        asset.owner = newOwner;
+        asset.locked = false;
+        asset.lockedBy = address(0);
+
+        TFHE.allow(asset.faceValue, newOwner);
+        TFHE.allowThis(asset.faceValue);
+        if (auditor != address(0)) {
+            TFHE.allow(asset.faceValue, auditor);
+        }
+
+        emit AssetTransferred(assetId, previousOwner, newOwner);
+    }
+
+
     function lockAsset(uint256 assetId, address _lendingContract) external override nonReentrant {
         Asset storage asset = _assets[assetId];
         require(asset.owner == msg.sender, "RWARegistry: not asset owner");

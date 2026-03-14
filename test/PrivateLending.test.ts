@@ -7,7 +7,12 @@ import {
   CreditScore,
   PrivateLending,
 } from "../typechain-types";
-import { getFhevmInstance, encryptUint64, reencryptAndDecrypt } from "./helpers/fhevm-test-helpers";
+import {
+  getFhevmInstance,
+  encryptUint64,
+  reencryptAndDecrypt,
+  handleToBytes32,
+} from "./helpers/fhevm-test-helpers";
 import type { FhevmInstance } from "fhevmjs/node";
 
 describe("PrivateLending", function () {
@@ -36,17 +41,17 @@ describe("PrivateLending", function () {
 
     // Deploy contracts
     const StablecoinFactory = await ethers.getContractFactory("ConfidentialStablecoin");
-    stablecoin = (await StablecoinFactory.deploy()) as ConfidentialStablecoin;
+    stablecoin = (await StablecoinFactory.deploy()) as unknown as ConfidentialStablecoin;
     await stablecoin.waitForDeployment();
     stablecoinAddress = await stablecoin.getAddress();
 
     const RWARegistryFactory = await ethers.getContractFactory("RWARegistry");
-    rwaRegistry = (await RWARegistryFactory.deploy()) as RWARegistry;
+    rwaRegistry = (await RWARegistryFactory.deploy()) as unknown as RWARegistry;
     await rwaRegistry.waitForDeployment();
     registryAddress = await rwaRegistry.getAddress();
 
     const CreditScoreFactory = await ethers.getContractFactory("CreditScore");
-    creditScore = (await CreditScoreFactory.deploy()) as CreditScore;
+    creditScore = (await CreditScoreFactory.deploy()) as unknown as CreditScore;
     await creditScore.waitForDeployment();
     creditScoreAddress = await creditScore.getAddress();
 
@@ -55,7 +60,7 @@ describe("PrivateLending", function () {
       registryAddress,
       creditScoreAddress,
       stablecoinAddress
-    )) as PrivateLending;
+    )) as unknown as PrivateLending;
     await privateLending.waitForDeployment();
     lendingAddress = await privateLending.getAddress();
 
@@ -79,7 +84,7 @@ describe("PrivateLending", function () {
     );
     const tx = await rwaRegistry
       .connect(borrower)
-      .registerAsset(handles[0], inputProof, 0, "ipfs://test-asset");
+      .registerAsset(handleToBytes32(handles[0]), inputProof, 0, "ipfs://test-asset");
     const receipt = await tx.wait();
     const event = receipt?.logs.find((l: any) => l.fragment?.name === "AssetRegistered");
     testAssetId = (event as any)?.args?.[0] ?? 0n;
@@ -96,7 +101,7 @@ describe("PrivateLending", function () {
       );
       const tx = await privateLending
         .connect(borrower)
-        .requestLoan(testAssetId, handles[0], inputProof);
+        .requestLoan(testAssetId, handleToBytes32(handles[0]), inputProof);
       const receipt = await tx.wait();
       const event = receipt?.logs.find((l: any) => l.fragment?.name === "LoanCreated");
       expect(event).to.not.be.undefined;
@@ -112,7 +117,7 @@ describe("PrivateLending", function () {
         500_000n
       );
       await expect(
-        privateLending.connect(stranger).requestLoan(testAssetId, handles[0], inputProof)
+        privateLending.connect(stranger).requestLoan(testAssetId, handleToBytes32(handles[0]), inputProof)
       ).to.be.revertedWith("PrivateLending: not asset owner");
     });
 
@@ -123,7 +128,7 @@ describe("PrivateLending", function () {
         borrower.address,
         500_000n
       );
-      await privateLending.connect(borrower).requestLoan(testAssetId, handles[0], inputProof);
+      await privateLending.connect(borrower).requestLoan(testAssetId, handleToBytes32(handles[0]), inputProof);
 
       const isLocked = await rwaRegistry.isLocked(testAssetId);
       expect(isLocked).to.be.true;
@@ -136,7 +141,7 @@ describe("PrivateLending", function () {
         borrower.address,
         500_000n
       );
-      await privateLending.connect(borrower).requestLoan(testAssetId, handles[0], inputProof);
+      await privateLending.connect(borrower).requestLoan(testAssetId, handleToBytes32(handles[0]), inputProof);
 
       const balanceHandle = await stablecoin.balanceOf(borrower.address);
       expect(balanceHandle).to.not.equal(0n);
@@ -153,7 +158,7 @@ describe("PrivateLending", function () {
         borrower.address,
         500_000n
       );
-      await privateLending.connect(borrower).requestLoan(testAssetId, handles[0], inputProof);
+      await privateLending.connect(borrower).requestLoan(testAssetId, handleToBytes32(handles[0]), inputProof);
 
       const status = await privateLending.getLoanStatus(0n);
       expect(status).to.equal(1); // LoanStatus.ACTIVE
@@ -166,7 +171,7 @@ describe("PrivateLending", function () {
         borrower.address,
         500_000n
       );
-      await privateLending.connect(borrower).requestLoan(testAssetId, h1[0], p1);
+      await privateLending.connect(borrower).requestLoan(testAssetId, handleToBytes32(h1[0]), p1);
 
       const { handles: h2, inputProof: p2 } = await encryptUint64(
         inst,
@@ -175,7 +180,7 @@ describe("PrivateLending", function () {
         300_000n
       );
       await expect(
-        privateLending.connect(borrower).requestLoan(testAssetId, h2[0], p2)
+        privateLending.connect(borrower).requestLoan(testAssetId, handleToBytes32(h2[0]), p2)
       ).to.be.revertedWith("PrivateLending: asset already locked");
     });
   });
@@ -192,7 +197,7 @@ describe("PrivateLending", function () {
       );
       const tx = await privateLending
         .connect(borrower)
-        .requestLoan(testAssetId, handles[0], inputProof);
+        .requestLoan(testAssetId, handleToBytes32(handles[0]), inputProof);
       const receipt = await tx.wait();
       const event = receipt?.logs.find((l: any) => l.fragment?.name === "LoanCreated");
       loanId = (event as any)?.args?.[0] ?? 0n;
@@ -229,7 +234,7 @@ describe("PrivateLending", function () {
       );
       const tx = await privateLending
         .connect(borrower)
-        .requestLoan(testAssetId, handles[0], inputProof);
+        .requestLoan(testAssetId, handleToBytes32(handles[0]), inputProof);
       const receipt = await tx.wait();
       const event = receipt?.logs.find((l: any) => l.fragment?.name === "LoanCreated");
       loanId = (event as any)?.args?.[0] ?? 0n;
@@ -242,7 +247,7 @@ describe("PrivateLending", function () {
         borrower.address,
         200_000n
       );
-      const tx = await privateLending.connect(borrower).repayLoan(loanId, handles[0], inputProof);
+      const tx = await privateLending.connect(borrower).repayLoan(loanId, handleToBytes32(handles[0]), inputProof);
       await tx.wait();
 
       // Loan should still be ACTIVE (partial repayment)
@@ -258,7 +263,7 @@ describe("PrivateLending", function () {
         100_000n
       );
       await expect(
-        privateLending.connect(stranger).repayLoan(loanId, handles[0], inputProof)
+        privateLending.connect(stranger).repayLoan(loanId, handleToBytes32(handles[0]), inputProof)
       ).to.be.revertedWith("PrivateLending: not borrower");
     });
   });
@@ -271,7 +276,7 @@ describe("PrivateLending", function () {
         borrower.address,
         500_000n
       );
-      await privateLending.connect(borrower).requestLoan(testAssetId, handles[0], inputProof);
+      await privateLending.connect(borrower).requestLoan(testAssetId, handleToBytes32(handles[0]), inputProof);
 
       const info = await privateLending.getLoanInfo(0n);
       expect(info.assetId).to.equal(testAssetId);
@@ -286,7 +291,7 @@ describe("PrivateLending", function () {
         borrower.address,
         500_000n
       );
-      await privateLending.connect(borrower).requestLoan(testAssetId, handles[0], inputProof);
+      await privateLending.connect(borrower).requestLoan(testAssetId, handleToBytes32(handles[0]), inputProof);
 
       const loans = await privateLending.getBorrowerLoans(borrower.address);
       expect(loans.length).to.equal(1);
@@ -306,7 +311,7 @@ describe("PrivateLending", function () {
       );
       const tx = await privateLending
         .connect(borrower)
-        .requestLoan(testAssetId, handles[0], inputProof);
+        .requestLoan(testAssetId, handleToBytes32(handles[0]), inputProof);
       const receipt = await tx.wait();
       const event = receipt?.logs.find((l: any) => l.fragment?.name === "LoanCreated");
       loanId = (event as any)?.args?.[0] ?? 0n;

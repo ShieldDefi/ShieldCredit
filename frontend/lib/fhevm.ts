@@ -7,9 +7,17 @@ export async function getOrCreateFhevmInstance(provider: BrowserProvider): Promi
   if (fhevmInstance) return fhevmInstance;
 
   const network = await provider.getNetwork();
+  const chainId = Number(network.chainId);
+
+  // Sepolia fhEVM contract addresses (from ZamaFHEVMConfig)
+  const kmsContractAddress = "0x9D6891A6240D6130c54ae243d8005063D05fE14b";
+  const aclContractAddress = "0xFee8407e2f5e3Ee68ad77cAE98c434e637f516e5";
+
   fhevmInstance = await createInstance({
-    chainId: Number(network.chainId),
-    provider,
+    kmsContractAddress,
+    aclContractAddress,
+    chainId,
+    network: provider,
   });
 
   return fhevmInstance;
@@ -20,10 +28,12 @@ export async function encryptAmount(
   contractAddress: string,
   userAddress: string,
   amount: bigint
-): Promise<{ handles: Uint8Array[]; inputProof: Uint8Array }> {
+): Promise<{ handle: string; inputProof: Uint8Array }> {
   const input = inst.createEncryptedInput(contractAddress, userAddress);
   input.add64(amount);
-  return input.encrypt();
+  const { handles, inputProof } = await input.encrypt();
+  const handle = "0x" + Buffer.from(handles[0]).toString("hex").padStart(64, "0");
+  return { handle, inputProof };
 }
 
 export async function reencryptBalance(

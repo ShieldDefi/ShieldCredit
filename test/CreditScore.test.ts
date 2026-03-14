@@ -2,7 +2,12 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { CreditScore } from "../typechain-types";
-import { getFhevmInstance, encryptUint32, reencryptAndDecrypt } from "./helpers/fhevm-test-helpers";
+import {
+  getFhevmInstance,
+  encryptUint32,
+  reencryptAndDecrypt,
+  handleToBytes32,
+} from "./helpers/fhevm-test-helpers";
 import type { FhevmInstance } from "fhevmjs/node";
 
 describe("CreditScore", function () {
@@ -19,7 +24,7 @@ describe("CreditScore", function () {
     [owner, oracle, lendingContract, borrower, stranger] = await ethers.getSigners();
 
     const CreditScoreFactory = await ethers.getContractFactory("CreditScore");
-    creditScore = (await CreditScoreFactory.deploy()) as CreditScore;
+    creditScore = (await CreditScoreFactory.deploy()) as unknown as CreditScore;
     await creditScore.waitForDeployment();
     creditScoreAddress = await creditScore.getAddress();
 
@@ -49,7 +54,7 @@ describe("CreditScore", function () {
       50
     );
     await expect(
-      creditScore.connect(stranger).updateScore(borrower.address, handles[0], inputProof, true)
+      creditScore.connect(stranger).updateScore(borrower.address, handleToBytes32(handles[0]), inputProof, true)
     ).to.be.revertedWith("CreditScore: not oracle");
   });
 
@@ -63,7 +68,7 @@ describe("CreditScore", function () {
       oracle.address,
       300
     );
-    await creditScore.connect(oracle).updateScore(borrower.address, handles[0], inputProof, true);
+    await creditScore.connect(oracle).updateScore(borrower.address, handleToBytes32(handles[0]), inputProof, true);
 
     const handle = await creditScore.connect(borrower).getEncryptedScore(borrower.address);
     const decrypted = await reencryptAndDecrypt(inst, borrower, creditScoreAddress, handle);
@@ -80,7 +85,7 @@ describe("CreditScore", function () {
       oracle.address,
       400
     );
-    await creditScore.connect(oracle).updateScore(borrower.address, handles[0], inputProof, false);
+    await creditScore.connect(oracle).updateScore(borrower.address, handleToBytes32(handles[0]), inputProof, false);
 
     const handle = await creditScore.connect(borrower).getEncryptedScore(borrower.address);
     const decrypted = await reencryptAndDecrypt(inst, borrower, creditScoreAddress, handle);
