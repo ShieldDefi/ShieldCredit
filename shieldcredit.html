@@ -1,0 +1,1963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShieldCredit — Confidential RWA-Backed Lending</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #060810;
+  --surface: #0c1020;
+  --surface2: #111827;
+  --border: rgba(255,255,255,0.07);
+  --border-accent: rgba(99,179,237,0.25);
+  --text: #e8edf5;
+  --muted: #6b7a99;
+  --accent: #63b3ed;
+  --accent2: #4fd1c5;
+  --accent3: #f6ad55;
+  --danger: #fc8181;
+  --success: #68d391;
+  --glow: rgba(99,179,237,0.12);
+  --glow2: rgba(79,209,197,0.08);
+  --font-display: 'Syne', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+  --font-body: 'DM Sans', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Background grid */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(99,179,237,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99,179,237,0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ambient glow orbs */
+.orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(120px);
+  pointer-events: none;
+  z-index: 0;
+}
+.orb-1 { width: 600px; height: 600px; background: rgba(99,179,237,0.06); top: -200px; right: -100px; }
+.orb-2 { width: 400px; height: 400px; background: rgba(79,209,197,0.05); bottom: 100px; left: -100px; }
+
+/* ===== LAYOUT ===== */
+.app { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+/* ===== HEADER ===== */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  height: 60px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(6,8,16,0.85);
+  backdrop-filter: blur(20px);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.5px;
+  color: var(--text);
+}
+
+.logo-icon {
+  width: 30px; height: 30px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+
+.logo span { color: var(--accent); }
+
+.header-center {
+  display: flex;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+}
+
+.nav-tab {
+  padding: 6px 16px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  background: none;
+  font-family: var(--font-body);
+  white-space: nowrap;
+}
+.nav-tab:hover { color: var(--text); }
+.nav-tab.active { background: var(--surface2); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+
+.header-right { display: flex; align-items: center; gap: 12px; }
+
+.network-badge {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 10px;
+  background: rgba(104,211,145,0.08);
+  border: 1px solid rgba(104,211,145,0.2);
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--success);
+  font-family: var(--font-mono);
+}
+.net-dot { width: 6px; height: 6px; background: var(--success); border-radius: 50%; animation: pulse 2s infinite; }
+
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.wallet-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 14px;
+  background: linear-gradient(135deg, rgba(99,179,237,0.15), rgba(79,209,197,0.1));
+  border: 1px solid rgba(99,179,237,0.3);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-body);
+}
+.wallet-btn:hover { background: linear-gradient(135deg, rgba(99,179,237,0.22), rgba(79,209,197,0.15)); border-color: rgba(99,179,237,0.5); }
+.wallet-btn.connected { color: var(--text); border-color: var(--border); background: var(--surface2); }
+
+/* ===== MAIN ===== */
+main { flex: 1; display: flex; }
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  padding: 20px 0;
+  display: flex;
+  flex-direction: column;
+  background: rgba(12,16,32,0.5);
+}
+
+.sidebar-section { padding: 0 12px; margin-bottom: 24px; }
+.sidebar-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 8px;
+  margin-bottom: 6px;
+}
+
+.sidebar-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 500;
+  margin-bottom: 2px;
+  border: none; background: none; width: 100%; text-align: left;
+  font-family: var(--font-body);
+}
+.sidebar-item:hover { background: var(--surface2); color: var(--text); }
+.sidebar-item.active { background: linear-gradient(135deg, rgba(99,179,237,0.12), rgba(79,209,197,0.06)); color: var(--accent); border: 1px solid rgba(99,179,237,0.15); }
+.sidebar-item .icon { font-size: 15px; width: 20px; text-align: center; }
+
+.sidebar-divider { height: 1px; background: var(--border); margin: 8px 12px 16px; }
+
+.stats-widget {
+  margin: 0 12px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.stat-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.stat-row:last-child { margin-bottom: 0; }
+.stat-label { font-size: 11px; color: var(--muted); }
+.stat-val { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
+.stat-val.green { color: var(--success); }
+.stat-val.blue { color: var(--accent); }
+
+/* ===== CONTENT AREA ===== */
+.content { flex: 1; padding: 28px 32px; overflow-y: auto; max-height: calc(100vh - 60px); }
+
+/* ===== PAGE TITLE ===== */
+.page-header { margin-bottom: 24px; }
+.page-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  margin-bottom: 4px;
+}
+.page-subtitle { font-size: 13px; color: var(--muted); }
+
+/* ===== CARDS ===== */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px;
+  margin-bottom: 20px;
+}
+.card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 18px;
+}
+.card-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  display: flex; align-items: center; gap: 8px;
+}
+.card-badge {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+.badge-fhe { background: rgba(99,179,237,0.12); color: var(--accent); border: 1px solid rgba(99,179,237,0.2); }
+.badge-enc { background: rgba(79,209,197,0.1); color: var(--accent2); border: 1px solid rgba(79,209,197,0.2); }
+.badge-active { background: rgba(104,211,145,0.1); color: var(--success); border: 1px solid rgba(104,211,145,0.2); }
+.badge-warning { background: rgba(246,173,85,0.1); color: var(--accent3); border: 1px solid rgba(246,173,85,0.2); }
+.badge-danger { background: rgba(252,129,129,0.1); color: var(--danger); border: 1px solid rgba(252,129,129,0.2); }
+
+/* ===== FORM ELEMENTS ===== */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-group.full { grid-column: 1 / -1; }
+
+label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+input, select, textarea {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 13.5px;
+  font-family: var(--font-body);
+  transition: all 0.2s;
+  outline: none;
+  width: 100%;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: rgba(99,179,237,0.4);
+  box-shadow: 0 0 0 3px rgba(99,179,237,0.08);
+}
+input::placeholder { color: #3a4560; }
+select option { background: var(--surface2); }
+
+.input-with-suffix { position: relative; }
+.input-with-suffix input { padding-right: 54px; }
+.input-suffix {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+}
+
+.input-encrypted {
+  border-color: rgba(99,179,237,0.2) !important;
+  background: rgba(99,179,237,0.04) !important;
+}
+.encrypt-indicator {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--accent);
+  margin-top: 4px;
+  font-family: var(--font-mono);
+}
+
+/* ===== BUTTONS ===== */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  font-family: var(--font-body);
+  white-space: nowrap;
+}
+.btn-primary {
+  background: linear-gradient(135deg, #4a9fd4, #38b2ac);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(99,179,237,0.2);
+}
+.btn-primary:hover { box-shadow: 0 4px 28px rgba(99,179,237,0.35); transform: translateY(-1px); }
+.btn-secondary {
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text);
+}
+.btn-secondary:hover { border-color: rgba(99,179,237,0.3); color: var(--accent); }
+.btn-danger { background: rgba(252,129,129,0.1); border: 1px solid rgba(252,129,129,0.25); color: var(--danger); }
+.btn-danger:hover { background: rgba(252,129,129,0.18); }
+.btn-ghost { background: none; color: var(--muted); }
+.btn-ghost:hover { color: var(--text); }
+.btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 6px; }
+.btn-xs { padding: 4px 9px; font-size: 11px; border-radius: 5px; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+.btn-full { width: 100%; }
+
+/* ===== ENCRYPTED VALUE DISPLAY ===== */
+.enc-value {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(99,179,237,0.06);
+  border: 1px solid rgba(99,179,237,0.15);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+}
+.enc-lock { font-size: 11px; }
+
+.dec-value {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(104,211,145,0.06);
+  border: 1px solid rgba(104,211,145,0.15);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--success);
+}
+
+/* ===== METRIC CARDS ===== */
+.metrics-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+.metric-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+}
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.metric-card:hover::before { opacity: 1; }
+.metric-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+.metric-value {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.metric-value.enc { font-size: 14px; color: var(--accent); font-family: var(--font-mono); }
+.metric-sub { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+.trend-up { color: var(--success); }
+.trend-down { color: var(--danger); }
+
+/* ===== TABLE ===== */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+thead tr { border-bottom: 1px solid var(--border); }
+th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  white-space: nowrap;
+}
+td { padding: 13px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tbody tr { transition: background 0.15s; }
+tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+/* ===== STATUS BADGES ===== */
+.status {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 20px;
+  font-size: 11px; font-weight: 600;
+  font-family: var(--font-mono);
+}
+.status-active { background: rgba(104,211,145,0.1); color: var(--success); }
+.status-repaid { background: rgba(99,179,237,0.1); color: var(--accent); }
+.status-liquidated { background: rgba(252,129,129,0.1); color: var(--danger); }
+.status-locked { background: rgba(246,173,85,0.1); color: var(--accent3); }
+.status-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+
+/* ===== PROGRESS BAR ===== */
+.progress-bar {
+  height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden;
+  margin-top: 6px;
+}
+.progress-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+.progress-safe { background: linear-gradient(90deg, var(--success), var(--accent2)); }
+.progress-warn { background: linear-gradient(90deg, var(--accent3), #e53e3e); }
+
+/* ===== INFO BOX ===== */
+.info-box {
+  display: flex; gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.info-box-blue { background: rgba(99,179,237,0.07); border: 1px solid rgba(99,179,237,0.18); color: #a8d4f0; }
+.info-box-green { background: rgba(104,211,145,0.07); border: 1px solid rgba(104,211,145,0.18); color: #9ae6b4; }
+.info-box-orange { background: rgba(246,173,85,0.07); border: 1px solid rgba(246,173,85,0.18); color: #fcd29a; }
+.info-box-red { background: rgba(252,129,129,0.07); border: 1px solid rgba(252,129,129,0.18); color: #feb2b2; }
+
+/* ===== STEP INDICATOR ===== */
+.step-row { display: flex; gap: 8px; margin-bottom: 20px; }
+.step {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--muted);
+}
+.step.active { color: var(--accent); }
+.step.done { color: var(--success); }
+.step-num {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  background: var(--surface2); border: 1px solid var(--border);
+  font-family: var(--font-mono);
+}
+.step.active .step-num { background: rgba(99,179,237,0.15); border-color: rgba(99,179,237,0.4); color: var(--accent); }
+.step.done .step-num { background: rgba(104,211,145,0.12); border-color: rgba(104,211,145,0.3); color: var(--success); }
+.step-divider { flex: 1; height: 1px; background: var(--border); align-self: center; max-width: 32px; }
+
+/* ===== TOAST ===== */
+#toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 16px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  max-width: 320px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  animation: slideIn 0.3s ease;
+}
+.toast.success { border-color: rgba(104,211,145,0.3); }
+.toast.error { border-color: rgba(252,129,129,0.3); }
+.toast.info { border-color: rgba(99,179,237,0.3); }
+.toast-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.toast-body { flex: 1; }
+.toast-title { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+.toast-msg { font-size: 12px; color: var(--muted); }
+@keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes fadeOut { to { opacity: 0; transform: translateY(8px); } }
+
+/* ===== MODAL ===== */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(6px);
+  z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  width: 100%;
+  max-width: 480px;
+  transform: translateY(12px); transition: transform 0.25s;
+}
+.modal-overlay.open .modal { transform: translateY(0); }
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.modal-title { font-family: var(--font-display); font-size: 17px; font-weight: 700; }
+.modal-close { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; line-height: 1; padding: 4px; }
+.modal-close:hover { color: var(--text); }
+
+/* ===== PAGES ===== */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ===== HERO (pre-connect) ===== */
+.hero {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: calc(100vh - 60px);
+  text-align: center;
+  padding: 40px 20px;
+}
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 14px;
+  border: 1px solid rgba(99,179,237,0.25);
+  border-radius: 20px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--accent);
+  margin-bottom: 28px;
+  background: rgba(99,179,237,0.06);
+}
+.hero h1 {
+  font-family: var(--font-display);
+  font-size: 52px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -1.5px;
+  margin-bottom: 18px;
+  max-width: 680px;
+}
+.hero h1 span { background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.hero p { font-size: 16px; color: var(--muted); max-width: 500px; line-height: 1.7; margin-bottom: 36px; }
+.hero-actions { display: flex; gap: 12px; }
+.btn-hero {
+  padding: 14px 28px;
+  font-size: 15px;
+  border-radius: 10px;
+}
+.hero-features {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 16px; margin-top: 64px; max-width: 680px; width: 100%;
+}
+.hero-feature {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  text-align: left;
+}
+.hero-feature-icon { font-size: 22px; margin-bottom: 10px; }
+.hero-feature-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.hero-feature-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+/* ===== DASHBOARD ===== */
+.ltv-bar {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 8px;
+}
+.ltv-track {
+  flex: 1; height: 8px;
+  background: var(--surface2);
+  border-radius: 4px; overflow: hidden;
+}
+.ltv-fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
+
+/* ===== ASSET TYPE ICONS ===== */
+.asset-icon {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.asset-tb { background: rgba(99,179,237,0.12); }
+.asset-inv { background: rgba(104,211,145,0.12); }
+.asset-re { background: rgba(246,173,85,0.12); }
+.asset-eq { background: rgba(168,85,247,0.12); }
+
+/* ===== ACCORDION ===== */
+.accordion { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+.accordion-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 16px;
+  cursor: pointer;
+  background: var(--surface2);
+  transition: background 0.15s;
+}
+.accordion-header:hover { background: rgba(99,179,237,0.05); }
+.accordion-title { font-weight: 600; font-size: 13.5px; }
+.accordion-arrow { transition: transform 0.2s; color: var(--muted); }
+.accordion.open .accordion-arrow { transform: rotate(180deg); }
+.accordion-body { display: none; padding: 16px; background: var(--surface); }
+.accordion.open .accordion-body { display: block; }
+
+/* ===== REGULATOR GLOW ===== */
+.regulator-header {
+  background: linear-gradient(135deg, rgba(246,173,85,0.08), rgba(252,129,129,0.06));
+  border: 1px solid rgba(246,173,85,0.2);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  display: flex; gap: 12px; align-items: flex-start;
+}
+.audit-report {
+  background: rgba(104,211,145,0.03);
+  border: 1px solid rgba(104,211,145,0.15);
+  border-radius: 10px;
+  padding: 16px;
+}
+.audit-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.audit-row:last-child { border-bottom: none; }
+.audit-field { font-size: 12px; color: var(--muted); }
+.audit-value { font-family: var(--font-mono); font-size: 13px; color: var(--text); }
+
+/* ===== TX LOG ===== */
+.tx-log {
+  background: #030508;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  max-height: 130px;
+  overflow-y: auto;
+  line-height: 1.8;
+}
+.tx-line { color: var(--muted); }
+.tx-line .ts { color: #2a3550; }
+.tx-line .ok { color: var(--success); }
+.tx-line .hash { color: var(--accent); }
+.tx-line .enc { color: var(--accent2); }
+.tx-line .err { color: var(--danger); }
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+
+/* ===== FHE ANIMATION ===== */
+@keyframes encryptAnim {
+  0% { opacity: 1; color: var(--text); }
+  50% { opacity: 0.5; color: var(--accent); letter-spacing: 3px; }
+  100% { opacity: 1; color: var(--accent); }
+}
+.encrypting { animation: encryptAnim 0.8s ease forwards; }
+
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.15);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* divider line */
+.divider { height: 1px; background: var(--border); margin: 18px 0; }
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+.tag {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 4px;
+  font-size: 11px; font-family: var(--font-mono);
+}
+.tag-blue { background: rgba(99,179,237,0.1); color: var(--accent); }
+.tag-green { background: rgba(104,211,145,0.1); color: var(--success); }
+.tag-orange { background: rgba(246,173,85,0.1); color: var(--accent3); }
+
+.mt-8 { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+.mt-16 { margin-top: 16px; }
+.mb-16 { margin-bottom: 16px; }
+.gap-8 { gap: 8px; }
+.flex { display: flex; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.flex-wrap { flex-wrap: wrap; }
+.gap-10 { gap: 10px; }
+.gap-12 { gap: 12px; }
+.text-muted { color: var(--muted); }
+.text-sm { font-size: 12px; }
+.text-mono { font-family: var(--font-mono); }
+.font-semibold { font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- Ambient -->
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+
+<div class="app" id="app">
+
+<!-- ===== HEADER ===== -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🛡</div>
+    Shield<span>Credit</span>
+  </div>
+
+  <div class="header-center" id="headerNav" style="display:none">
+    <button class="nav-tab active" onclick="showPage('dashboard')">Overview</button>
+    <button class="nav-tab" onclick="showPage('register')">Register Asset</button>
+    <button class="nav-tab" onclick="showPage('borrow')">Borrow</button>
+    <button class="nav-tab" onclick="showPage('loans')">My Loans</button>
+    <button class="nav-tab" onclick="showPage('regulator')">Regulator</button>
+  </div>
+
+  <div class="header-right">
+    <div class="network-badge" id="networkBadge" style="display:none">
+      <div class="net-dot"></div>
+      Sepolia
+    </div>
+    <button class="wallet-btn" id="walletBtn" onclick="connectWallet()">
+      <span>🔗</span> Connect Wallet
+    </button>
+  </div>
+</header>
+
+<!-- ===== MAIN ===== -->
+<main>
+
+<!-- Sidebar -->
+<div class="sidebar" id="sidebar" style="display:none">
+  <div class="sidebar-section">
+    <div class="sidebar-label">Protocol</div>
+    <button class="sidebar-item active" onclick="showPage('dashboard')"><span class="icon">⬛</span> Overview</button>
+    <button class="sidebar-item" onclick="showPage('register')"><span class="icon">🏷️</span> Register RWA</button>
+    <button class="sidebar-item" onclick="showPage('borrow')"><span class="icon">💰</span> Borrow</button>
+    <button class="sidebar-item" onclick="showPage('loans')"><span class="icon">📋</span> My Loans</button>
+  </div>
+  <div class="sidebar-divider"></div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Access</div>
+    <button class="sidebar-item" onclick="showPage('regulator')"><span class="icon">🔍</span> Regulator View</button>
+    <button class="sidebar-item" onclick="showPage('compliance')"><span class="icon">⚖️</span> Compliance</button>
+  </div>
+  <div class="sidebar-divider"></div>
+  <div class="stats-widget">
+    <div class="sidebar-label" style="padding:0;margin-bottom:10px">Portfolio</div>
+    <div class="stat-row">
+      <span class="stat-label">Collateral</span>
+      <span class="stat-val blue enc-value" style="padding:1px 5px;font-size:11px">🔒 encrypted</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Outstanding</span>
+      <span class="stat-val enc-value" style="padding:1px 5px;font-size:11px">🔒 encrypted</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">sUSD Balance</span>
+      <span class="stat-val blue" id="sidebarBalance">— sUSD</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Credit Score</span>
+      <span class="stat-val green enc-value" style="padding:1px 5px;font-size:11px">🔒 encrypted</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== CONTENT ===== -->
+<div class="content" id="mainContent">
+
+<!-- ==================== HERO (not connected) ==================== -->
+<div id="heroPage" class="hero">
+  <div class="hero-eyebrow">
+    <span>🔐</span> Powered by Zama fhEVM · Fully Homomorphic Encryption
+  </div>
+  <h1>Confidential <span>RWA-Backed</span> Lending On-Chain</h1>
+  <p>Institutions can finally borrow against tokenized real-world assets without exposing balance sheets, credit scores, or loan positions to the public.</p>
+  <div class="hero-actions">
+    <button class="btn btn-primary btn-hero" onclick="connectWallet()">🔗 Connect Wallet</button>
+    <button class="btn btn-secondary btn-hero" onclick="showDemoMode()">▶ View Demo</button>
+  </div>
+  <div class="hero-features">
+    <div class="hero-feature">
+      <div class="hero-feature-icon">🏦</div>
+      <div class="hero-feature-title">RWA Collateral</div>
+      <div class="hero-feature-desc">Tokenize Treasury bonds, invoices & real estate as encrypted collateral</div>
+    </div>
+    <div class="hero-feature">
+      <div class="hero-feature-icon">🔒</div>
+      <div class="hero-feature-title">FHE Privacy</div>
+      <div class="hero-feature-desc">Balances, credit scores & loan amounts stay encrypted at all times</div>
+    </div>
+    <div class="hero-feature">
+      <div class="hero-feature-icon">⚖️</div>
+      <div class="hero-feature-title">Compliant by Design</div>
+      <div class="hero-feature-desc">Regulators get selective decryption via ACL — no backdoors</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== DASHBOARD ==================== -->
+<div id="dashboardPage" class="page">
+  <div class="page-header">
+    <div class="page-title">Protocol Overview</div>
+    <div class="page-subtitle">Your confidential lending dashboard — all sensitive values are FHE-encrypted</div>
+  </div>
+
+  <div class="metrics-row">
+    <div class="metric-card">
+      <div class="metric-label">Total Collateral</div>
+      <div class="metric-value enc">🔒 encrypted</div>
+      <div class="metric-sub"><span class="tag tag-blue">euint64</span></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Outstanding Debt</div>
+      <div class="metric-value enc">🔒 encrypted</div>
+      <div class="metric-sub"><span class="tag tag-blue">euint64</span></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">sUSD Balance</div>
+      <div class="metric-value" id="dashBalance">6,000,000</div>
+      <div class="metric-sub"><span class="trend-up">▲ 0.0%</span> last 30d</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Credit Score</div>
+      <div class="metric-value enc">🔒 encrypted</div>
+      <div class="metric-sub"><span class="tag tag-green">ebool eligible</span></div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <!-- Active Loans -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📋 Active Loans <span class="card-badge badge-active">1 Active</span></div>
+        <button class="btn btn-secondary btn-sm" onclick="showPage('loans')">View All</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Loan ID</th>
+              <th>Collateral</th>
+              <th>Principal</th>
+              <th>LTV</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="text-mono text-sm">#001</span></td>
+              <td>
+                <div class="flex items-center gap-8">
+                  <div class="asset-icon asset-tb">🏛️</div>
+                  <div>
+                    <div class="font-semibold" style="font-size:13px">T-Bond 2029</div>
+                    <div class="text-muted text-sm">Asset #001</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="enc-value">🔒 encrypted</span></td>
+              <td>
+                <div style="min-width:90px">
+                  <div class="flex justify-between text-sm"><span style="color:var(--accent)">60%</span><span class="text-muted">max 70%</span></div>
+                  <div class="progress-bar"><div class="progress-fill progress-safe" style="width:85.7%"></div></div>
+                </div>
+              </td>
+              <td><span class="status status-active"><span class="status-dot"></span>Active</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Assets -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🏷️ My Assets <span class="card-badge badge-enc">FHE</span></div>
+        <button class="btn btn-secondary btn-sm" onclick="showPage('register')">+ Register</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+          <div class="flex items-center gap-8">
+            <div class="asset-icon asset-tb">🏛️</div>
+            <div>
+              <div class="font-semibold" style="font-size:13px">US Treasury Bond 2029</div>
+              <div class="text-muted text-sm">TREASURY_BOND · Asset #001</div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div class="enc-value">🔒 encrypted</div>
+            <div class="mt-8"><span class="status status-locked"><span class="status-dot"></span>Locked</span></div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+          <div class="flex items-center gap-8">
+            <div class="asset-icon asset-inv">📄</div>
+            <div>
+              <div class="font-semibold" style="font-size:13px">Trade Invoice Q4-2025</div>
+              <div class="text-muted text-sm">INVOICE · Asset #002</div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div class="enc-value">🔒 encrypted</div>
+            <div class="mt-8"><span class="status status-active"><span class="status-dot"></span>Available</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Protocol Stats -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">📊 Protocol Statistics</div>
+      <span class="card-badge badge-fhe">Zama fhEVM</span>
+    </div>
+    <div class="three-col">
+      <div>
+        <div class="metric-label">Total Value Locked</div>
+        <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--text)">$248.7M</div>
+        <div class="metric-sub"><span class="trend-up">▲ 12.4%</span> 30d</div>
+      </div>
+      <div>
+        <div class="metric-label">Active Borrowers</div>
+        <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--text)">1,847</div>
+        <div class="metric-sub"><span class="trend-up">▲ 3.2%</span> 30d</div>
+      </div>
+      <div>
+        <div class="metric-label">Avg Interest Rate</div>
+        <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--text)">5.0%</div>
+        <div class="metric-sub text-muted">Annual · basis pts</div>
+      </div>
+      <div>
+        <div class="metric-label">Liquidations (30d)</div>
+        <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--text)">3</div>
+        <div class="metric-sub text-muted">0.16% of loans</div>
+      </div>
+      <div>
+        <div class="metric-label">fhEVM Coprocessors</div>
+        <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--success)">Online</div>
+        <div class="metric-sub"><span class="net-dot" style="display:inline-block"></span> All systems nominal</div>
+      </div>
+      <div>
+        <div class="metric-label">Gateway Latency</div>
+        <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--text)">1.8s</div>
+        <div class="metric-sub text-muted">Avg decrypt time</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== REGISTER ASSET ==================== -->
+<div id="registerPage" class="page">
+  <div class="page-header">
+    <div class="page-title">Register Real-World Asset</div>
+    <div class="page-subtitle">Tokenize your off-chain asset as collateral — face value is encrypted via Zama fhEVM</div>
+  </div>
+
+  <div class="info-box info-box-blue">
+    <span>🔐</span>
+    <span>The face value you enter is encrypted client-side using <strong>fhevmjs</strong> before submission. It is never exposed on-chain in plaintext. Only you, the designated auditor, and a court-authorized regulator can decrypt it.</span>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Asset Details <span class="card-badge badge-enc">FHE Encrypted</span></div>
+        </div>
+
+        <div class="step-row">
+          <div class="step done"><div class="step-num">✓</div><span>Connect</span></div>
+          <div class="step-divider"></div>
+          <div class="step active"><div class="step-num">2</div><span>Asset Info</span></div>
+          <div class="step-divider"></div>
+          <div class="step"><div class="step-num">3</div><span>Encrypt & Sign</span></div>
+          <div class="step-divider"></div>
+          <div class="step"><div class="step-num">4</div><span>Confirm</span></div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Asset Type</label>
+            <select id="assetType">
+              <option value="0">🏛️ Treasury Bond</option>
+              <option value="1">📄 Invoice / Receivable</option>
+              <option value="2">🏠 Real Estate</option>
+              <option value="3">📈 Equity</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Face Value (USD) <span class="tag tag-blue">encrypted</span></label>
+            <div class="input-with-suffix">
+              <input type="number" id="faceValue" class="input-encrypted" placeholder="10,000,000" oninput="updateAssetPreview()">
+              <span class="input-suffix">USD</span>
+            </div>
+            <div class="encrypt-indicator">🔒 Will be encrypted via fhevmjs · euint64</div>
+          </div>
+          <div class="form-group full">
+            <label>Asset Name / Description</label>
+            <input type="text" id="assetName" placeholder="e.g. US Treasury Bond 2029 — CUSIP 912828YM6" value="US Treasury Bond 2029">
+          </div>
+          <div class="form-group full">
+            <label>Metadata URI (IPFS or HTTPS)</label>
+            <input type="text" id="metadataURI" placeholder="ipfs://Qm..." value="ipfs://QmTreasury2029Bond">
+          </div>
+          <div class="form-group">
+            <label>Maturity Date</label>
+            <input type="date" value="2029-06-30">
+          </div>
+          <div class="form-group">
+            <label>Coupon Rate (%)</label>
+            <input type="number" placeholder="4.25" value="4.25">
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="tx-log" id="registerLog">
+          <div class="tx-line"><span class="ts">[00:00:00]</span> Ready to register asset...</div>
+        </div>
+
+        <div class="mt-12 flex gap-10">
+          <button class="btn btn-primary" style="flex:1" onclick="registerAsset()">🔐 Encrypt & Register Asset</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Preview -->
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Asset Preview</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div class="asset-icon asset-tb" style="width:48px;height:48px;font-size:22px" id="previewIcon">🏛️</div>
+          <div>
+            <div style="font-family:var(--font-display);font-size:16px;font-weight:700" id="previewName">US Treasury Bond 2029</div>
+            <div class="text-muted text-sm" id="previewType">TREASURY_BOND</div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="audit-row" style="padding:8px 0">
+            <span class="audit-field">Face Value</span>
+            <span class="enc-value" id="previewValue">🔒 Will be encrypted</span>
+          </div>
+          <div class="audit-row" style="padding:8px 0">
+            <span class="audit-field">Max Borrow (70% LTV)</span>
+            <span class="audit-value" id="previewMaxBorrow">—</span>
+          </div>
+          <div class="audit-row" style="padding:8px 0">
+            <span class="audit-field">Liquidation Threshold</span>
+            <span class="audit-value" id="previewLiqThresh">—</span>
+          </div>
+          <div class="audit-row" style="padding:8px 0">
+            <span class="audit-field">Owner</span>
+            <span class="audit-value text-mono text-sm" id="previewOwner">0x7f3d...c4a1</span>
+          </div>
+          <div class="audit-row" style="padding:8px 0">
+            <span class="audit-field">Auditor</span>
+            <span class="audit-value text-mono text-sm">0x8b2e...f91d</span>
+          </div>
+          <div class="audit-row" style="padding:8px 0">
+            <span class="audit-field">Encryption</span>
+            <span class="tag tag-blue">euint64 · fhEVM</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:0">
+        <div class="card-title" style="margin-bottom:12px">📋 Registered Assets</div>
+        <div style="display:flex;flex-direction:column;gap:8px" id="assetList">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--surface2);border-radius:8px">
+            <div class="flex items-center gap-8">
+              <div class="asset-icon asset-tb">🏛️</div>
+              <div>
+                <div style="font-size:13px;font-weight:600">US Treasury Bond 2029</div>
+                <div class="text-muted text-sm">Asset #001 · TREASURY_BOND</div>
+              </div>
+            </div>
+            <div style="text-align:right">
+              <div class="enc-value">🔒 encrypted</div>
+              <div class="text-muted text-sm mt-8">2 days ago</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== BORROW ==================== -->
+<div id="borrowPage" class="page">
+  <div class="page-header">
+    <div class="page-title">Request Loan</div>
+    <div class="page-subtitle">Borrow ShieldUSD (sUSD) against your encrypted RWA collateral</div>
+  </div>
+
+  <div class="info-box info-box-blue">
+    <span>🔐</span>
+    <span>Loan amount is encrypted before submission. Your credit score is evaluated homomorphically — the protocol only receives a binary <strong>approved/rejected</strong> signal without ever seeing your score value. No front-running possible.</span>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Loan Parameters <span class="card-badge badge-enc">FHE</span></div>
+        </div>
+
+        <div class="form-group mb-16">
+          <label>Select Collateral Asset</label>
+          <select id="loanAssetId" onchange="updateLoanPreview()">
+            <option value="001">🏛️ Asset #001 — US Treasury Bond 2029 (Available)</option>
+            <option value="002">📄 Asset #002 — Trade Invoice Q4-2025 (Available)</option>
+          </select>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Loan Amount (sUSD) <span class="tag tag-blue">encrypted</span></label>
+            <div class="input-with-suffix">
+              <input type="number" id="loanAmount" class="input-encrypted" placeholder="6,000,000" value="6000000" oninput="updateLoanPreview()">
+              <span class="input-suffix">sUSD</span>
+            </div>
+            <div class="encrypt-indicator">🔒 Encrypted client-side · euint64</div>
+          </div>
+          <div class="form-group">
+            <label>Interest Rate</label>
+            <input type="text" value="5.0% APR (fixed)" readonly style="color:var(--muted)">
+          </div>
+        </div>
+
+        <!-- LTV Calculator -->
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin:16px 0">
+          <div class="flex justify-between text-sm mb-16">
+            <span class="text-muted">Requested</span>
+            <span class="text-mono" id="ltvRequested">6,000,000 sUSD</span>
+          </div>
+          <div class="flex justify-between text-sm mb-16">
+            <span class="text-muted">Max Allowed (70% LTV)</span>
+            <span class="text-mono" style="color:var(--accent)">🔒 Computed on encrypted collateral</span>
+          </div>
+          <div class="flex justify-between text-sm" style="margin-bottom:8px">
+            <span class="text-muted">LTV Utilization</span>
+            <span class="text-mono" id="ltvPct" style="color:var(--accent)">~60% of max</span>
+          </div>
+          <div class="progress-bar" style="height:8px">
+            <div class="progress-fill progress-safe" id="ltvBar" style="width:85.7%"></div>
+          </div>
+          <div class="text-muted text-sm mt-8">Liquidation triggers at 80% of collateral value</div>
+        </div>
+
+        <!-- Credit Check -->
+        <div style="background:var(--surface2);border:1px solid rgba(104,211,145,0.2);border-radius:8px;padding:14px;margin-bottom:16px">
+          <div class="flex justify-between items-center">
+            <div>
+              <div style="font-weight:600;font-size:13px">Credit Eligibility Check</div>
+              <div class="text-muted text-sm mt-8">Homomorphic evaluation — score never revealed</div>
+            </div>
+            <div>
+              <div class="enc-value" style="border-color:rgba(104,211,145,0.3);color:var(--success)">🔒 ebool: eligible</div>
+            </div>
+          </div>
+          <div class="text-muted text-sm mt-8">Minimum threshold: 550 / 850 · Evaluated with <code style="color:var(--accent2)">TFHE.ge(score, threshold)</code></div>
+        </div>
+
+        <div class="tx-log" id="borrowLog">
+          <div class="tx-line"><span class="ts">[00:00:00]</span> Ready to request loan...</div>
+        </div>
+
+        <div class="mt-12 flex gap-10">
+          <button class="btn btn-primary" style="flex:1" onclick="requestLoan()">🔐 Encrypt & Request Loan</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Loan Summary</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0">
+          <div class="audit-row" style="padding:12px 0">
+            <span class="audit-field">Asset</span>
+            <span class="audit-value">T-Bond 2029 (#001)</span>
+          </div>
+          <div class="audit-row" style="padding:12px 0">
+            <span class="audit-field">Collateral Value</span>
+            <span class="enc-value">🔒 encrypted (euint64)</span>
+          </div>
+          <div class="audit-row" style="padding:12px 0">
+            <span class="audit-field">Loan Principal</span>
+            <span class="enc-value">🔒 encrypted (euint64)</span>
+          </div>
+          <div class="audit-row" style="padding:12px 0">
+            <span class="audit-field">Liquidation Threshold</span>
+            <span class="enc-value">🔒 encrypted (euint64)</span>
+          </div>
+          <div class="audit-row" style="padding:12px 0">
+            <span class="audit-field">Interest Rate</span>
+            <span class="audit-value">500 bps (5% APR)</span>
+          </div>
+          <div class="audit-row" style="padding:12px 0">
+            <span class="audit-field">Credit Check</span>
+            <span style="color:var(--success);font-family:var(--font-mono);font-size:12px">TFHE.ge → ebool: true</span>
+          </div>
+          <div class="audit-row" style="padding:12px 0">
+            <span class="audit-field">Disbursement</span>
+            <span class="enc-value">🔒 TFHE.select → sUSD</span>
+          </div>
+          <div class="audit-row" style="padding:12px 0">
+            <span class="audit-field">Lender sees</span>
+            <span style="color:var(--success);font-size:12px">Approved ✓ only</span>
+          </div>
+        </div>
+        <div class="info-box info-box-green mt-12">
+          <span>✅</span>
+          <span>Loan approved flag computed via <code style="color:var(--accent2)">TFHE.and(eligible, validAmount)</code>. Disbursement uses <code style="color:var(--accent2)">TFHE.select</code> — no amount revealed to protocol.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MY LOANS ==================== -->
+<div id="loansPage" class="page">
+  <div class="page-header">
+    <div class="page-title">My Loans</div>
+    <div class="page-subtitle">Manage active loans — decrypt your details privately via re-encryption</div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Active Positions <span class="card-badge badge-active">1 Active</span></div>
+      <button class="btn btn-secondary btn-sm" onclick="showPage('borrow')">+ New Loan</button>
+    </div>
+
+    <div id="loanAccordions">
+
+      <!-- Loan #001 -->
+      <div class="accordion open" id="loanAcc001">
+        <div class="accordion-header" onclick="toggleAccordion('loanAcc001')">
+          <div class="flex items-center gap-10">
+            <span class="text-mono text-sm" style="color:var(--accent)">#001</span>
+            <div class="asset-icon asset-tb" style="width:28px;height:28px;font-size:13px">🏛️</div>
+            <div>
+              <div class="font-semibold" style="font-size:13px">US Treasury Bond 2029</div>
+              <div class="text-muted text-sm">Opened Jan 15 2025 · 5.0% APR</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-10">
+            <span class="status status-active"><span class="status-dot"></span>Active</span>
+            <span class="accordion-arrow text-muted">▼</span>
+          </div>
+        </div>
+        <div class="accordion-body">
+          <div class="three-col" style="margin-bottom:16px">
+            <div>
+              <div class="metric-label">Principal</div>
+              <div id="loanPrincipal" class="enc-value" style="margin-top:4px">🔒 encrypted</div>
+              <button class="btn btn-ghost btn-xs mt-8" onclick="decryptField('loanPrincipal', '6,000,000 sUSD')">🔓 Decrypt</button>
+            </div>
+            <div>
+              <div class="metric-label">Outstanding Balance</div>
+              <div id="loanBalance" class="enc-value" style="margin-top:4px">🔒 encrypted</div>
+              <button class="btn btn-ghost btn-xs mt-8" onclick="decryptField('loanBalance', '6,025,000 sUSD')">🔓 Decrypt</button>
+            </div>
+            <div>
+              <div class="metric-label">Liquidation Threshold</div>
+              <div id="loanLiqThresh" class="enc-value" style="margin-top:4px">🔒 encrypted</div>
+              <button class="btn btn-ghost btn-xs mt-8" onclick="decryptField('loanLiqThresh', '8,000,000 sUSD')">🔓 Decrypt</button>
+            </div>
+          </div>
+
+          <!-- Health Factor -->
+          <div style="background:var(--surface2);border-radius:8px;padding:12px;margin-bottom:14px">
+            <div class="flex justify-between text-sm" style="margin-bottom:6px">
+              <span class="text-muted">Loan Health</span>
+              <span style="color:var(--success)">Healthy (computed on encrypted values)</span>
+            </div>
+            <div class="progress-bar" style="height:6px"><div class="progress-fill progress-safe" style="width:75.3%"></div></div>
+            <div class="text-muted text-sm mt-8">Liquidation: <code style="color:var(--accent2)">TFHE.gt(outstandingBalance, liquidationThreshold)</code></div>
+          </div>
+
+          <div class="tx-log mb-16" id="loanLog001">
+            <div class="tx-line"><span class="ts">[Jan 15 09:14]</span> <span class="ok">✓</span> Loan created · Asset #001 locked</div>
+            <div class="tx-line"><span class="ts">[Jan 15 09:14]</span> <span class="enc">🔒</span> Principal encrypted: <span class="hash">0x3f...a2c1</span></div>
+            <div class="tx-line"><span class="ts">[Jan 15 09:14]</span> <span class="ok">✓</span> sUSD minted to borrower · tx: <span class="hash">0x7b...de34</span></div>
+            <div class="tx-line"><span class="ts">[Feb 14 00:00]</span> <span class="ok">✓</span> Interest accrued · FHE.add on encrypted balance</div>
+          </div>
+
+          <!-- Repay form -->
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+            <div style="font-weight:600;font-size:13px;margin-bottom:10px">Repay Loan</div>
+            <div class="flex gap-10">
+              <div class="input-with-suffix" style="flex:1">
+                <input type="number" class="input-encrypted" id="repayAmt" placeholder="Amount to repay" value="3000000">
+                <span class="input-suffix">sUSD</span>
+              </div>
+              <button class="btn btn-primary" onclick="repayLoan('001')">🔐 Encrypt & Repay</button>
+            </div>
+            <div class="encrypt-indicator mt-8">🔒 Amount encrypted via fhevmjs · uses TFHE.min to cap at outstanding balance</div>
+          </div>
+
+          <div class="flex gap-10">
+            <button class="btn btn-secondary btn-sm" onclick="accrueInterest('001')">⏱ Accrue Interest</button>
+            <button class="btn btn-danger btn-sm" onclick="checkLiquidation('001')">⚠️ Check Liquidation</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loan #000 (repaid) -->
+      <div class="accordion" id="loanAcc000">
+        <div class="accordion-header" onclick="toggleAccordion('loanAcc000')">
+          <div class="flex items-center gap-10">
+            <span class="text-mono text-sm" style="color:var(--muted)">#000</span>
+            <div class="asset-icon asset-inv" style="width:28px;height:28px;font-size:13px">📄</div>
+            <div>
+              <div class="font-semibold" style="font-size:13px;color:var(--muted)">Trade Invoice Q3-2024</div>
+              <div class="text-muted text-sm">Opened Aug 01 2024 · Repaid Nov 12 2024</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-10">
+            <span class="status status-repaid"><span class="status-dot"></span>Repaid</span>
+            <span class="accordion-arrow text-muted">▼</span>
+          </div>
+        </div>
+        <div class="accordion-body">
+          <div class="info-box info-box-green">
+            <span>✅</span>
+            <span>Loan fully repaid. Collateral unlocked. Credit score updated positively via <code>TFHE.min(TFHE.add(score, delta), MAX_SCORE)</code></span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ==================== REGULATOR ==================== -->
+<div id="regulatorPage" class="page">
+  <div class="page-header">
+    <div class="page-title">Regulator Audit View</div>
+    <div class="page-subtitle">Selective decryption for authorized regulators and auditors only</div>
+  </div>
+
+  <div class="regulator-header">
+    <span style="font-size:22px">⚠️</span>
+    <div>
+      <div style="font-weight:700;font-size:14px;color:var(--accent3)">Regulator Access — Selective Decryption</div>
+      <div class="text-muted text-sm mt-8">This panel is only functional when accessed with the designated regulator address. All decryption requests are traceable on-chain via the ACL system. This view does not expose data to the public — it requires a signed EIP-712 re-encryption request from the regulator wallet.</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🔍 Audit Query <span class="card-badge badge-warning">Regulator Only</span></div>
+        </div>
+
+        <div class="form-group mb-16">
+          <label>Regulator Address</label>
+          <input type="text" id="regulatorAddr" value="0x8b2e4f91d7c3a506b8d12e4f91d7c3a5" style="font-family:var(--font-mono);font-size:12px">
+          <div class="encrypt-indicator" style="color:var(--accent3)">⚠️ Must match on-chain regulator ACL</div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Borrower Address</label>
+            <input type="text" id="auditBorrower" placeholder="0x..." value="0x7f3dc4a1b8e2..." style="font-family:var(--font-mono);font-size:12px">
+          </div>
+          <div class="form-group">
+            <label>Loan ID</label>
+            <input type="number" id="auditLoanId" value="1">
+          </div>
+        </div>
+
+        <div class="info-box info-box-orange mt-12 mb-16">
+          <span>🔑</span>
+          <span>Decryption requires signing an EIP-712 typed message with your regulator wallet. The signature authorizes a re-encryption of the ciphertext to your public key. Access is permanently logged on-chain.</span>
+        </div>
+
+        <div class="tx-log mb-16" id="regulatorLog">
+          <div class="tx-line"><span class="ts">[00:00:00]</span> Regulator panel ready...</div>
+        </div>
+
+        <button class="btn btn-primary btn-full" onclick="runAudit()">🔑 Sign & Decrypt Audit Report</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="card" id="auditReportCard">
+        <div class="card-header">
+          <div class="card-title">📋 Audit Report</div>
+          <span class="card-badge badge-warning" id="auditStatus">Pending</span>
+        </div>
+
+        <div class="audit-report" id="auditReport">
+          <div style="text-align:center;padding:32px 0;color:var(--muted)">
+            <div style="font-size:32px;margin-bottom:8px">🔒</div>
+            <div style="font-size:13px">Run an audit query to decrypt loan details</div>
+          </div>
+        </div>
+
+        <div class="mt-12 text-muted text-sm" id="auditFooter" style="display:none">
+          <div style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono)">
+            <span style="color:var(--success)">✓</span> Access logged on-chain · Tx: <span style="color:var(--accent)">0x4f...2a91</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-12" style="margin-top:16px">
+        <div class="card-title" style="margin-bottom:12px">⚖️ Compliance Model</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="audit-row" style="padding:8px 0">
+            <span class="audit-field">Borrower</span>
+            <span style="font-size:12px;color:var(--text)">Own balances + loan details</span>
+          </div>
+          <div class="audit-row" style="padding:8px 0">
+            <span class="audit-field">Public</span>
+            <span style="font-size:12px;color:var(--danger)">No financial data</span>
+          </div>
+          <div class="audit-row" style="padding:8px 0">
+            <span class="audit-field">Protocol</span>
+            <span style="font-size:12px;color:var(--muted)">Encrypted state only</span>
+          </div>
+          <div class="audit-row" style="padding:8px 0">
+            <span class="audit-field">Regulator</span>
+            <span style="font-size:12px;color:var(--success)">Full decrypt on court order</span>
+          </div>
+        </div>
+        <div class="info-box info-box-blue mt-12">
+          <span>🔐</span>
+          <span style="font-size:11.5px">All encrypted fields call <code style="color:var(--accent2)">TFHE.allow(handle, regulatorAddress)</code> at creation. No backdoors — decryption requires regulator's private key.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== COMPLIANCE ==================== -->
+<div id="compliancePage" class="page">
+  <div class="page-header">
+    <div class="page-title">Compliance & Privacy Model</div>
+    <div class="page-subtitle">How ShieldCredit achieves regulatory compliance without compromising privacy</div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">🔐 fhEVM Primitives Used</div>
+      <span class="card-badge badge-fhe">Zama Protocol</span>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <span class="tag tag-blue" style="padding:5px 10px">euint64</span>
+      <span class="tag tag-blue" style="padding:5px 10px">euint32</span>
+      <span class="tag tag-blue" style="padding:5px 10px">ebool</span>
+      <span class="tag tag-blue" style="padding:5px 10px">eaddress</span>
+      <span class="tag tag-green" style="padding:5px 10px">TFHE.add</span>
+      <span class="tag tag-green" style="padding:5px 10px">TFHE.sub</span>
+      <span class="tag tag-green" style="padding:5px 10px">TFHE.mul</span>
+      <span class="tag tag-green" style="padding:5px 10px">TFHE.div</span>
+      <span class="tag tag-green" style="padding:5px 10px">TFHE.le / TFHE.ge</span>
+      <span class="tag tag-green" style="padding:5px 10px">TFHE.lt / TFHE.gt</span>
+      <span class="tag tag-green" style="padding:5px 10px">TFHE.and</span>
+      <span class="tag tag-green" style="padding:5px 10px">TFHE.select</span>
+      <span class="tag tag-green" style="padding:5px 10px">TFHE.min / TFHE.max</span>
+      <span class="tag tag-orange" style="padding:5px 10px">TFHE.allow</span>
+      <span class="tag tag-orange" style="padding:5px 10px">TFHE.allowThis</span>
+      <span class="tag tag-orange" style="padding:5px 10px">Gateway.requestDecrypt</span>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title" style="margin-bottom:14px">🔄 Loan Lifecycle</div>
+      <div style="display:flex;flex-direction:column;gap:0">
+        <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
+          <div style="width:24px;height:24px;background:rgba(99,179,237,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--accent);flex-shrink:0;font-family:var(--font-mono)">1</div>
+          <div><div style="font-weight:600;font-size:13px">Register RWA</div><div class="text-muted text-sm">Face value encrypted via fhevmjs · stored as euint64</div></div>
+        </div>
+        <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
+          <div style="width:24px;height:24px;background:rgba(99,179,237,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--accent);flex-shrink:0;font-family:var(--font-mono)">2</div>
+          <div><div style="font-weight:600;font-size:13px">Credit Evaluation</div><div class="text-muted text-sm">TFHE.ge(score, 550) → ebool eligible — score never revealed</div></div>
+        </div>
+        <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
+          <div style="width:24px;height:24px;background:rgba(99,179,237,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--accent);flex-shrink:0;font-family:var(--font-mono)">3</div>
+          <div><div style="font-weight:600;font-size:13px">Loan Approval</div><div class="text-muted text-sm">TFHE.and(eligible, validAmount) → TFHE.select disbursement</div></div>
+        </div>
+        <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
+          <div style="width:24px;height:24px;background:rgba(99,179,237,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--accent);flex-shrink:0;font-family:var(--font-mono)">4</div>
+          <div><div style="font-weight:600;font-size:13px">Interest Accrual</div><div class="text-muted text-sm">TFHE.mul(principal, rate) · TFHE.add(balance, interest) — homomorphic</div></div>
+        </div>
+        <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
+          <div style="width:24px;height:24px;background:rgba(79,209,197,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--accent2);flex-shrink:0;font-family:var(--font-mono)">5</div>
+          <div><div style="font-weight:600;font-size:13px">Repayment</div><div class="text-muted text-sm">TFHE.min(repay, balance) · Gateway decrypts fully-repaid ebool for callback</div></div>
+        </div>
+        <div style="display:flex;gap:12px;padding:12px 0">
+          <div style="width:24px;height:24px;background:rgba(252,129,129,0.12);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--danger);flex-shrink:0;font-family:var(--font-mono)">6</div>
+          <div><div style="font-weight:600;font-size:13px">Liquidation Guard</div><div class="text-muted text-sm">TFHE.gt(balance, threshold) — no front-running possible on encrypted threshold</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:14px">🏗️ Contract Architecture</div>
+        <div style="background:#030508;border-radius:8px;padding:14px;font-family:var(--font-mono);font-size:11.5px;line-height:2;color:var(--muted)">
+          <div><span style="color:var(--accent2)">ConfidentialStablecoin</span> (sUSD)</div>
+          <div style="padding-left:16px">↳ euint64 _balances[address]</div>
+          <div style="padding-left:16px">↳ mint / transfer (FHE)</div>
+          <div style="margin-top:8px"><span style="color:var(--accent2)">RWARegistry</span></div>
+          <div style="padding-left:16px">↳ euint64 faceValue</div>
+          <div style="padding-left:16px">↳ lock / unlock / transfer</div>
+          <div style="margin-top:8px"><span style="color:var(--accent2)">CreditScore</span></div>
+          <div style="padding-left:16px">↳ euint32 _scores[address]</div>
+          <div style="padding-left:16px">↳ isEligible → ebool</div>
+          <div style="margin-top:8px"><span style="color:var(--accent)">PrivateLending</span> ← core</div>
+          <div style="padding-left:16px">↳ euint64 principal</div>
+          <div style="padding-left:16px">↳ euint64 outstandingBalance</div>
+          <div style="padding-left:16px">↳ euint64 liquidationThreshold</div>
+          <div style="padding-left:16px">↳ Gateway.requestDecrypt</div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="card-title" style="margin-bottom:12px">🌐 Deployment</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="audit-row" style="padding:6px 0"><span class="audit-field">Network</span><span class="tag tag-blue">Ethereum Sepolia</span></div>
+          <div class="audit-row" style="padding:6px 0"><span class="audit-field">fhEVM</span><span class="tag tag-green">Zama Coprocessors</span></div>
+          <div class="audit-row" style="padding:6px 0"><span class="audit-field">RWARegistry</span><span class="audit-value text-mono text-sm">0x1a2b...3c4d</span></div>
+          <div class="audit-row" style="padding:6px 0"><span class="audit-field">PrivateLending</span><span class="audit-value text-mono text-sm">0x5e6f...7a8b</span></div>
+          <div class="audit-row" style="padding:6px 0"><span class="audit-field">CreditScore</span><span class="audit-value text-mono text-sm">0x9c0d...1e2f</span></div>
+          <div class="audit-row" style="padding:6px 0"><span class="audit-field">sUSD Token</span><span class="audit-value text-mono text-sm">0x3a4b...5c6d</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /content -->
+</main>
+
+</div><!-- /app -->
+
+<!-- ===== MODAL: Connect Wallet ===== -->
+<div class="modal-overlay" id="connectModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Connect Wallet</div>
+      <button class="modal-close" onclick="closeModal('connectModal')">✕</button>
+    </div>
+    <div class="info-box info-box-blue" style="margin-bottom:16px">
+      <span>ℹ️</span>
+      <span>Connect your wallet to interact with ShieldCredit on Sepolia testnet. Your financial data stays encrypted at all times.</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-primary btn-full" style="padding:14px;font-size:14px" onclick="connectMetaMask()">
+        <span>🦊</span> MetaMask
+      </button>
+      <button class="btn btn-secondary btn-full" style="padding:14px;font-size:14px" onclick="connectMetaMask()">
+        <span>🔗</span> WalletConnect
+      </button>
+      <button class="btn btn-secondary btn-full" style="padding:14px;font-size:14px" onclick="connectMetaMask()">
+        <span>🔵</span> Coinbase Wallet
+      </button>
+    </div>
+    <div class="text-muted text-sm mt-12" style="text-align:center">Network: Ethereum Sepolia (Chain ID: 11155111)</div>
+  </div>
+</div>
+
+<!-- ===== MODAL: Signing ===== -->
+<div class="modal-overlay" id="signModal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <div class="modal-title" id="signModalTitle">Encrypting & Signing</div>
+    </div>
+    <div style="text-align:center;padding:20px 0">
+      <div style="font-size:48px;margin-bottom:12px">🔐</div>
+      <div class="spinner" style="width:32px;height:32px;border-width:3px;margin:0 auto 16px"></div>
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--accent)" id="signModalStep">Encrypting with fhevmjs...</div>
+      <div class="text-muted text-sm mt-12" id="signModalSub">Computing FHE ciphertext client-side</div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script>
+// ===== STATE =====
+let isConnected = false;
+let walletAddress = '';
+let currentPage = 'hero';
+
+// ===== WALLET =====
+function connectWallet() {
+  openModal('connectModal');
+}
+
+function connectMetaMask() {
+  closeModal('connectModal');
+  walletAddress = '0x7f3d' + Math.random().toString(16).slice(2,6) + 'c4a1';
+  isConnected = true;
+  document.getElementById('walletBtn').innerHTML = `<span>🟢</span> ${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}`;
+  document.getElementById('walletBtn').classList.add('connected');
+  document.getElementById('networkBadge').style.display = 'flex';
+  document.getElementById('headerNav').style.display = 'flex';
+  document.getElementById('sidebar').style.display = 'flex';
+  document.getElementById('sidebarBalance').textContent = '6,000,000 sUSD';
+  document.getElementById('previewOwner').textContent = walletAddress.slice(0,8)+'...'+walletAddress.slice(-4);
+  showPage('dashboard');
+  toast('success','Wallet Connected', `${walletAddress.slice(0,10)}... on Sepolia`);
+}
+
+function showDemoMode() {
+  connectMetaMask();
+}
+
+// ===== NAVIGATION =====
+function showPage(page) {
+  // Hide all
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('heroPage').style.display = 'none';
+
+  if (!isConnected && page !== 'hero') {
+    document.getElementById('heroPage').style.display = 'flex';
+    return;
+  }
+
+  const pId = page + 'Page';
+  const el = document.getElementById(pId);
+  if (el) el.classList.add('active');
+
+  // Sync nav tabs
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.sidebar-item').forEach(t => t.classList.remove('active'));
+
+  const tabMap = { dashboard:'Overview', register:'Register Asset', borrow:'Borrow', loans:'My Loans', regulator:'Regulator', compliance:'Compliance' };
+  document.querySelectorAll('.nav-tab').forEach(t => { if(t.textContent.trim() === tabMap[page]) t.classList.add('active'); });
+  document.querySelectorAll('.sidebar-item').forEach(t => {
+    const txt = t.querySelector('span:last-child')?.textContent || t.textContent;
+    if (page === 'dashboard' && txt.includes('Overview')) t.classList.add('active');
+    if (page === 'register' && txt.includes('RWA')) t.classList.add('active');
+    if (page === 'borrow' && txt.includes('Borrow')) t.classList.add('active');
+    if (page === 'loans' && txt.includes('Loans')) t.classList.add('active');
+    if (page === 'regulator' && txt.includes('Regulator')) t.classList.add('active');
+    if (page === 'compliance' && txt.includes('Compliance')) t.classList.add('active');
+  });
+
+  currentPage = page;
+}
+
+// ===== ASSET PREVIEW =====
+const assetIcons = ['🏛️','📄','🏠','📈'];
+const assetTypes = ['TREASURY_BOND','INVOICE','REAL_ESTATE','EQUITY'];
+const assetBgs = ['asset-tb','asset-inv','asset-re','asset-eq'];
+
+function updateAssetPreview() {
+  const val = parseFloat(document.getElementById('faceValue').value) || 0;
+  const typeIdx = parseInt(document.getElementById('assetType').value) || 0;
+  const name = document.getElementById('assetName').value || 'Asset';
+
+  document.getElementById('previewIcon').className = 'asset-icon ' + assetBgs[typeIdx];
+  document.getElementById('previewIcon').textContent = assetIcons[typeIdx];
+  document.getElementById('previewName').textContent = name;
+  document.getElementById('previewType').textContent = assetTypes[typeIdx];
+
+  if (val > 0) {
+    document.getElementById('previewValue').textContent = '🔒 encrypted · $' + val.toLocaleString();
+    document.getElementById('previewMaxBorrow').textContent = '$' + (val * 0.7).toLocaleString();
+    document.getElementById('previewLiqThresh').textContent = '$' + (val * 0.8).toLocaleString();
+  } else {
+    document.getElementById('previewValue').textContent = '🔒 Will be encrypted';
+    document.getElementById('previewMaxBorrow').textContent = '—';
+    document.getElementById('previewLiqThresh').textContent = '—';
+  }
+}
+
+// ===== LOAN PREVIEW =====
+function updateLoanPreview() {
+  const amt = parseFloat(document.getElementById('loanAmount').value) || 0;
+  document.getElementById('ltvRequested').textContent = amt.toLocaleString() + ' sUSD';
+  const pct = Math.min(Math.round((amt / 10000000) * 100), 100);
+  document.getElementById('ltvPct').textContent = `~${Math.round(amt/10000000*70*100/70)}% of max`;
+  const barW = Math.min((amt / 7000000) * 100, 100);
+  document.getElementById('ltvBar').style.width = barW + '%';
+  document.getElementById('ltvBar').className = 'progress-fill ' + (barW > 90 ? 'progress-warn' : 'progress-safe');
+}
+
+// ===== REGISTER ASSET =====
+function registerAsset() {
+  const fv = document.getElementById('faceValue').value;
+  if (!fv) { toast('error','Missing Face Value','Enter a face value to encrypt'); return; }
+
+  const log = document.getElementById('registerLog');
+  log.innerHTML = '';
+
+  openModal('signModal');
+  document.getElementById('signModalTitle').textContent = 'Encrypting Asset';
+  document.getElementById('signModalStep').textContent = 'Encrypting face value with fhevmjs...';
+  document.getElementById('signModalSub').textContent = 'Computing euint64 ciphertext client-side';
+
+  setTimeout(() => {
+    appendLog(log, 'Encrypting face value · fhevmjs.createEncryptedInput()', 'enc');
+    document.getElementById('signModalStep').textContent = 'Generating input proof...';
+    document.getElementById('signModalSub').textContent = 'ZK proof for fhEVM coprocessor';
+  }, 600);
+
+  setTimeout(() => {
+    appendLog(log, 'Input proof generated · 256-byte ciphertext', 'ok');
+    document.getElementById('signModalStep').textContent = 'Awaiting wallet signature...';
+    document.getElementById('signModalSub').textContent = 'Sign the registerAsset transaction';
+  }, 1400);
+
+  setTimeout(() => {
+    appendLog(log, 'Transaction signed · broadcasting to Sepolia...', 'ok');
+    document.getElementById('signModalStep').textContent = 'Confirming on-chain...';
+  }, 2200);
+
+  setTimeout(() => {
+    closeModal('signModal');
+    const assetId = Math.floor(Math.random() * 900) + 100;
+    appendLog(log, `✓ Asset #${assetId} registered · tx: 0x${randHex(8)}`, 'ok');
+    appendLog(log, `🔒 TFHE.allow(faceValue, ${walletAddress.slice(0,8)}...) ✓`, 'enc');
+    appendLog(log, '🔒 TFHE.allow(faceValue, auditor) ✓', 'enc');
+    appendLog(log, `✓ AssetRegistered event emitted`, 'ok');
+
+    // Add to asset list
+    const li = document.createElement('div');
+    li.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);animation:slideIn 0.3s ease';
+    const typeIdx = parseInt(document.getElementById('assetType').value)||0;
+    li.innerHTML = `<div class="flex items-center gap-8"><div class="asset-icon ${assetBgs[typeIdx]}">${assetIcons[typeIdx]}</div><div><div style="font-size:13px;font-weight:600">${document.getElementById('assetName').value}</div><div class="text-muted text-sm">Asset #${assetId} · ${assetTypes[typeIdx]}</div></div></div><div><div class="enc-value">🔒 encrypted</div><div class="text-muted text-sm mt-8">just now</div></div>`;
+    document.getElementById('assetList').appendChild(li);
+
+    toast('success', 'Asset Registered', `Asset #${assetId} encrypted and registered on Sepolia`);
+  }, 3200);
+}
+
+// ===== REQUEST LOAN =====
+function requestLoan() {
+  const amt = document.getElementById('loanAmount').value;
+  if (!amt) { toast('error','Missing Amount','Enter a loan amount'); return; }
+
+  const log = document.getElementById('borrowLog');
+  log.innerHTML = '';
+
+  openModal('signModal');
+  document.getElementById('signModalTitle').textContent = 'Processing Loan Request';
+  document.getElementById('signModalStep').textContent = 'Encrypting loan amount...';
+  document.getElementById('signModalSub').textContent = 'fhevmjs · euint64 ciphertext';
+
+  const steps = [
+    [600, 'Evaluating credit score homomorphically...', 'TFHE.ge(score, 550) → ebool'],
+    [1300, 'Computing LTV check...', 'TFHE.le(loanAmount, maxLoan) → ebool'],
+    [2000, 'Combining approval conditions...', 'TFHE.and(eligible, validAmount)'],
+    [2700, 'Computing disbursement...', 'TFHE.select(approved, amount, 0)'],
+    [3400, 'Awaiting wallet signature...', 'Sign requestLoan transaction'],
+    [4100, 'Confirming on-chain...', 'Broadcasting to Sepolia'],
+  ];
+  steps.forEach(([delay, step, sub]) => {
+    setTimeout(() => {
+      document.getElementById('signModalStep').textContent = step;
+      document.getElementById('signModalSub').textContent = sub;
+    }, delay);
+  });
+
+  setTimeout(() => {
+    closeModal('signModal');
+    appendLog(log, '🔒 Loan amount encrypted · euint64 ciphertext', 'enc');
+    appendLog(log, '🔒 TFHE.ge(creditScore, 550) → ebool: true', 'ok');
+    appendLog(log, '🔒 TFHE.le(loanAmount, maxLoan) → ebool: true', 'ok');
+    appendLog(log, '🔒 TFHE.and(eligible, validAmount) → approved', 'ok');
+    appendLog(log, '🔒 TFHE.select → disbursement computed', 'enc');
+    appendLog(log, '✓ Asset #001 locked in RWARegistry', 'ok');
+    appendLog(log, '✓ sUSD minted to borrower · tx: 0x'+randHex(8), 'ok');
+    appendLog(log, '✓ LoanCreated event · Loan #002', 'ok');
+    toast('success', 'Loan Approved', 'sUSD disbursed to your wallet — details encrypted');
+  }, 5000);
+}
+
+// ===== REPAY =====
+function repayLoan(id) {
+  const amt = document.getElementById('repayAmt').value;
+  if (!amt) { toast('error','Enter Repayment Amount',''); return; }
+  const log = document.getElementById('loanLog001');
+  openModal('signModal');
+  document.getElementById('signModalTitle').textContent = 'Processing Repayment';
+  document.getElementById('signModalStep').textContent = 'Encrypting repayment amount...';
+  document.getElementById('signModalSub').textContent = 'TFHE.min(repay, outstandingBalance)';
+
+  setTimeout(() => { document.getElementById('signModalStep').textContent = 'Gateway decryption request...'; document.getElementById('signModalSub').textContent = 'Checking if fully repaid: ebool'; }, 1200);
+  setTimeout(() => { document.getElementById('signModalStep').textContent = 'Awaiting signature...'; }, 2400);
+  setTimeout(() => {
+    closeModal('signModal');
+    appendLog(log, '🔒 Repayment encrypted · TFHE.min applied', 'enc');
+    appendLog(log, '🔒 Outstanding balance updated · TFHE.sub', 'enc');
+    appendLog(log, '✓ Repayment tx: 0x'+randHex(8), 'ok');
+    appendLog(log, '✓ Gateway decrypt: fullyRepaid = false', 'ok');
+    toast('success', 'Repayment Processed', 'Partial repayment recorded — encrypted balance updated');
+  }, 3600);
+}
+
+// ===== ACCRUE INTEREST =====
+function accrueInterest(id) {
+  const log = document.getElementById(`loanLog${String(id).padStart(3,'0')}`);
+  appendLog(log, '⏱ accrueInterest called...', '');
+  setTimeout(() => {
+    appendLog(log, '🔒 TFHE.mul(principal, rate) · TFHE.div by SECONDS_PER_YEAR', 'enc');
+    appendLog(log, '🔒 TFHE.add(outstandingBalance, interest) ✓', 'enc');
+    appendLog(log, '✓ InterestAccrued event · tx: 0x'+randHex(8), 'ok');
+    toast('info', 'Interest Accrued', 'Balance updated homomorphically');
+  }, 1200);
+}
+
+// ===== CHECK LIQUIDATION =====
+function checkLiquidation(id) {
+  const log = document.getElementById(`loanLog${String(id).padStart(3,'0')}`);
+  appendLog(log, '⚠️ Checking liquidation condition...', '');
+  setTimeout(() => {
+    appendLog(log, '🔒 TFHE.gt(outstandingBalance, liquidationThreshold) → ebool', 'enc');
+    appendLog(log, '🔒 Gateway.requestDecrypt → callback pending...', 'enc');
+    setTimeout(() => {
+      appendLog(log, '✓ Gateway callback · shouldLiquidate = false', 'ok');
+      appendLog(log, '✓ Loan remains healthy — no liquidation needed', 'ok');
+      toast('success', 'Loan Healthy', 'No liquidation — position safe');
+    }, 1800);
+  }, 1000);
+}
+
+// ===== REGULATOR AUDIT =====
+function runAudit() {
+  const log = document.getElementById('regulatorLog');
+  log.innerHTML = '';
+  openModal('signModal');
+  document.getElementById('signModalTitle').textContent = 'Regulator Decryption';
+  document.getElementById('signModalStep').textContent = 'Verifying regulator ACL...';
+  document.getElementById('signModalSub').textContent = 'Checking TFHE.allow permissions';
+
+  setTimeout(() => { document.getElementById('signModalStep').textContent = 'Generating EIP-712 re-encryption request...'; document.getElementById('signModalSub').textContent = 'Sign with regulator wallet'; }, 1200);
+  setTimeout(() => { document.getElementById('signModalStep').textContent = 'Requesting Gateway decryption...'; document.getElementById('signModalSub').textContent = 'Zama KMS threshold decryption'; }, 2400);
+  setTimeout(() => { document.getElementById('signModalStep').textContent = 'Decrypting ciphertexts...'; document.getElementById('signModalSub').textContent = 'Re-encrypting to regulator public key'; }, 3400);
+
+  setTimeout(() => {
+    closeModal('signModal');
+    appendLog(log, '✓ Regulator ACL verified · TFHE.allow confirmed', 'ok');
+    appendLog(log, '🔒 EIP-712 signature verified · re-encryption authorized', 'enc');
+    appendLog(log, '🔒 Threshold KMS decryption complete', 'enc');
+    appendLog(log, '✓ Access logged on-chain · tx: 0x'+randHex(8), 'ok');
+
+    document.getElementById('auditStatus').textContent = 'Complete';
+    document.getElementById('auditStatus').className = 'card-badge badge-active';
+    document.getElementById('auditFooter').style.display = 'block';
+
+    document.getElementById('auditReport').innerHTML = `
+      <div class="audit-row" style="padding:10px 0"><span class="audit-field">Borrower</span><span class="audit-value text-mono text-sm">0x7f3d...c4a1</span></div>
+      <div class="audit-row" style="padding:10px 0"><span class="audit-field">Loan ID</span><span class="audit-value">#001</span></div>
+      <div class="audit-row" style="padding:10px 0"><span class="audit-field">Loan Status</span><span class="status status-active"><span class="status-dot"></span>Active</span></div>
+      <div class="audit-row" style="padding:10px 0"><span class="audit-field">Principal</span><span class="dec-value">🔓 6,000,000 sUSD</span></div>
+      <div class="audit-row" style="padding:10px 0"><span class="audit-field">Outstanding Balance</span><span class="dec-value">🔓 6,025,000 sUSD</span></div>
+      <div class="audit-row" style="padding:10px 0"><span class="audit-field">Collateral Value</span><span class="dec-value">🔓 10,000,000 USD</span></div>
+      <div class="audit-row" style="padding:10px 0"><span class="audit-field">Liquidation Threshold</span><span class="dec-value">🔓 8,000,000 sUSD</span></div>
+      <div class="audit-row" style="padding:10px 0"><span class="audit-field">Interest Rate</span><span class="audit-value">500 bps (5.0% APR)</span></div>
+      <div class="audit-row" style="padding:10px 0"><span class="audit-field">Asset Type</span><span class="audit-value">TREASURY_BOND</span></div>
+      <div class="audit-row" style="padding:10px 0"><span class="audit-field">Credit Score</span><span class="dec-value">🔓 712 / 850</span></div>
+      <div class="audit-row" style="padding:10px 0"><span class="audit-field">Opened</span><span class="audit-value">Jan 15, 2025 09:14 UTC</span></div>
+      <div class="info-box info-box-orange" style="margin-top:12px"><span>⚠️</span><span style="font-size:11.5px">This decryption event is permanently recorded on-chain. Unauthorized access attempts are detectable via the ACL event log.</span></div>
+    `;
+    toast('success', 'Audit Complete', 'Loan details decrypted for regulator view');
+  }, 4600);
+}
+
+// ===== DECRYPT FIELD =====
+function decryptField(elId, value) {
+  const el = document.getElementById(elId);
+  el.innerHTML = '<span class="spinner"></span>';
+  el.className = 'enc-value';
+  setTimeout(() => {
+    el.className = 'dec-value';
+    el.innerHTML = `🔓 ${value}`;
+    toast('info', 'Field Decrypted', 'Re-encrypted via EIP-712 signature');
+  }, 1600);
+}
+
+// ===== ACCORDION =====
+function toggleAccordion(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+
+// ===== MODAL =====
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if(e.target === m) closeModal(m.id); });
+});
+
+// ===== TOAST =====
+function toast(type, title, msg) {
+  const icons = { success:'✅', error:'❌', info:'ℹ️' };
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<div class="toast-icon">${icons[type]||'ℹ️'}</div><div class="toast-body"><div class="toast-title">${title}</div>${msg?`<div class="toast-msg">${msg}</div>`:''}</div>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => { el.style.animation = 'fadeOut 0.4s ease forwards'; setTimeout(() => el.remove(), 400); }, 3800);
+}
+
+// ===== TX LOG =====
+function appendLog(el, msg, cls) {
+  const now = new Date();
+  const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  const line = document.createElement('div');
+  line.className = 'tx-line';
+  const clsMap = { ok:'ok', enc:'enc', err:'err' };
+  const span = cls && clsMap[cls] ? `<span class="${clsMap[cls]}">${msg}</span>` : msg;
+  line.innerHTML = `<span class="ts">[${ts}]</span> ${span}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function randHex(n) { return Array.from({length:n},()=>Math.floor(Math.random()*16).toString(16)).join(''); }
+
+// ===== INIT =====
+window.onload = () => {
+  document.getElementById('heroPage').style.display = 'flex';
+  document.getElementById('sidebar').style.display = 'none';
+  updateLoanPreview();
+};
+</script>
+</body>
+</html>

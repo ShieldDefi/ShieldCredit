@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "fhevm/lib/TFHE.sol";
+import "@fhevm/solidity/lib/FHE.sol";
 
 interface ICreditScore {
     event ScoreInitialized(address indexed borrower);
@@ -11,7 +11,7 @@ interface ICreditScore {
 
     function updateScore(
         address borrower,
-        einput encryptedDelta,
+        externalEuint32 encryptedDelta,
         bytes calldata inputProof,
         bool positive
     ) external;

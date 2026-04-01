@@ -40,7 +40,7 @@ export async function reencryptAndDecrypt(
   inst: FhevmInstance,
   signer: HardhatEthersSigner,
   contractAddr: string,
-  handle: bigint
+  handle: bigint | string
 ): Promise<bigint> {
   const { publicKey, privateKey } = inst.generateKeypair();
   const eip712 = inst.createEIP712(publicKey, contractAddr);
@@ -49,7 +49,14 @@ export async function reencryptAndDecrypt(
     { Reencrypt: eip712.types.Reencrypt },
     eip712.message
   );
-  return inst.reencrypt(handle, privateKey, publicKey, signature, contractAddr, signer.address);
+  return inst.reencrypt(
+    typeof handle === "bigint" ? handle : BigInt(handle),
+    privateKey,
+    publicKey,
+    signature,
+    contractAddr,
+    signer.address
+  );
 }
 
 /**

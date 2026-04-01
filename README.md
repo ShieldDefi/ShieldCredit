@@ -28,7 +28,7 @@ ShieldCredit solves this using Zama's Fully Homomorphic Encryption (FHE) coproce
         └─────── all encrypted ops ──────────┘
                          |
                 [Zama fhEVM Coprocessors]
-                [Gateway: requestDecrypt()]
+                [Relayer: encrypt / public decrypt / user decrypt]
 ```
 
 ---
@@ -48,7 +48,7 @@ ShieldCredit solves this using Zama's Fully Homomorphic Encryption (FHE) coproce
 ```bash
 # Clone and install
 git clone https://github.com/ShieldDefi/ShieldCredit.git
-cd ShieldRemit
+cd ShieldCredit
 npm install
 
 # Configure environment
@@ -64,6 +64,9 @@ npm test
 # Deploy to Sepolia
 npm run deploy:sepolia
 
+# Seed demo assets and loans
+npm run seed:sepolia
+
 # Run end-to-end demo on Sepolia
 npm run demo
 
@@ -76,23 +79,23 @@ npm run frontend
 ## Loan Lifecycle
 
 1. **Asset Registration** — Institution calls `RWARegistry.registerAsset()` with an encrypted face value. The `euint64` handle is stored on-chain; plaintext never leaves the client.
-2. **Loan Request** — Borrower calls `PrivateLending.requestLoan()` with an encrypted loan amount. The contract computes 70% LTV and credit eligibility entirely on ciphertext using `TFHE.mul`, `TFHE.div`, `TFHE.le`, `TFHE.and`, `TFHE.select`.
-3. **Disbursement** — If approved, `TFHE.select(approved, loanAmount, 0)` determines the disbursement. Stablecoin is minted to the borrower with an encrypted balance.
+2. **Loan Request** — Borrower calls `PrivateLending.requestLoan()` with an encrypted loan amount. The contract computes 70% LTV and credit eligibility entirely on ciphertext using `FHE.mul`, `FHE.div`, `FHE.le`, `FHE.and`, `FHE.select`.
+3. **Disbursement** — If approved, `FHE.select(approved, loanAmount, 0)` determines the disbursement. Stablecoin is minted to the borrower with an encrypted balance.
 4. **Interest Accrual** — Anyone can call `accrueInterest()`. Interest is computed as `principal × rate × elapsed / (SECONDS_PER_YEAR × 10000)` on ciphertext.
-5. **Repayment** — Borrower encrypts a repayment amount. `TFHE.min(repay, outstanding)` ensures they cannot overpay. A Gateway decrypt call on `outstanding == 0` triggers a callback to mark the loan REPAID and unlock the asset.
-6. **Liquidation Check** — `checkAndLiquidate()` computes `TFHE.gt(outstanding, liquidationThreshold)` and requests a Gateway decrypt. If true, the asset is transferred to the protocol and the borrower's credit score is penalized.
+5. **Repayment** — Borrower encrypts a repayment amount. `FHE.min(repay, outstanding)` ensures they cannot overpay. The repayment status is made publicly decryptable, verified with a relayer proof, and finalized onchain to unlock the asset when fully repaid.
+6. **Liquidation Check** — `checkAndLiquidate()` computes `FHE.gt(outstanding, liquidationThreshold)`, makes that decision publicly decryptable, and finalizes liquidation onchain after proof verification.
 
 ---
 
 ## Compliance Model
 
-The regulator ACL is established at loan creation: `TFHE.allow(field, regulator)` is called for every encrypted field (`principal`, `outstandingBalance`, `collateralValue`, `liquidationThreshold`). The regulator address is set by the contract owner via `setRegulator()`, and any change re-allows all active loan fields for the new address.
+The regulator ACL is established at loan creation: `FHE.allow(field, regulator)` is called for every encrypted field (`principal`, `outstandingBalance`, `collateralValue`, `liquidationThreshold`). The regulator address is set by the contract owner via `setRegulator()`, and any change re-allows all active loan fields for the new address.
 
 To actually read an encrypted value, the regulator must:
 1. Hold the designated regulator address
 2. Call `getEncryptedLoanFields()` to obtain the `euint64` handles
 3. Generate an EIP-712 re-encryption request signed with their private key
-4. Submit to the Zama Gateway, which returns a re-encrypted ciphertext decryptable only by the regulator's key
+4. Submit to the Zama relayer, which returns a re-encrypted ciphertext decryptable only by the regulator's key
 
 Every re-encryption request produces an on-chain event, making regulator access fully auditable.
 
@@ -101,21 +104,21 @@ Every re-encryption request produces an on-chain event, making regulator access 
 ## fhEVM Primitives Used
 
 - **Types**: `euint64`, `euint32`, `ebool`
-- **Arithmetic**: `TFHE.add`, `TFHE.sub`, `TFHE.mul`, `TFHE.div`
-- **Comparisons**: `TFHE.le`, `TFHE.ge`, `TFHE.lt`, `TFHE.gt`, `TFHE.eq`
-- **Logic**: `TFHE.and`, `TFHE.select`
-- **Clamping**: `TFHE.min`, `TFHE.max`
-- **Access Control**: `TFHE.allow`, `TFHE.allowThis`
-- **Conversion**: `TFHE.asEuint64`, `TFHE.asEuint32`
-- **Gateway**: `Gateway.requestDecrypt` with typed callbacks
+- **Arithmetic**: `FHE.add`, `FHE.sub`, `FHE.mul`, `FHE.div`
+- **Comparisons**: `FHE.le`, `FHE.ge`, `FHE.lt`, `FHE.gt`, `FHE.eq`
+- **Logic**: `FHE.and`, `FHE.select`
+- **Clamping**: `FHE.min`, `FHE.max`
+- **Access Control**: `FHE.allow`, `FHE.allowThis`
+- **Conversion**: `FHE.asEuint64`, `FHE.asEuint32`
+- **Relayer proofs**: public decrypt proofs verified onchain with `FHE.checkSignatures`
 
 ---
 
 ## Security Considerations
 
 - **No plaintext in events**: All `Transfer`, `LoanCreated`, `LoanRepaid`, and `LoanLiquidated` events carry no amount data — only addresses and IDs.
-- **ACL on all transfers**: Every encrypted handle write is followed by `TFHE.allow()` for every authorized party; handles without explicit permission cannot be re-encrypted.
-- **Gateway callback authentication**: Callbacks (`callbackRepay`, `callbackLiquidate`) verify `msg.sender == Gateway.getGateway()` to prevent spoofing.
+- **ACL on all transfers**: Every encrypted handle write is followed by `FHE.allow()` for every authorized party; handles without explicit permission cannot be re-encrypted.
+- **Relayer proof verification**: Public decrypt outputs are finalized onchain only after `FHE.checkSignatures()` verifies the relayer proof against the pending ciphertext handle.
 - **Reentrancy guards**: All state-changing public functions use OpenZeppelin's `ReentrancyGuard`.
 - **Oracle trust assumption**: The scoring oracle has unilateral ability to update credit scores. In production, this should be a multi-sig or a verifiable oracle network.
 

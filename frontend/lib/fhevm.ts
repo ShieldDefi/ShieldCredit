@@ -1,57 +1,176 @@
-import { createInstance, type FhevmInstance } from "fhevmjs";
-import type { BrowserProvider } from "ethers";
+import { hexlify, toBeHex, zeroPadValue } from "ethers";
+import type { JsonRpcSigner } from "ethers";
+import { getActiveWalletProvider } from "./wagmi";
 
+type DecryptSigner = JsonRpcSigner | {
+  address: string;
+  signTypedData: JsonRpcSigner["signTypedData"];
+};
+
+type RelayerModule = typeof import("@zama-fhe/relayer-sdk/web");
+type FhevmInstance = Awaited<ReturnType<RelayerModule["createInstance"]>>;
+type HandleContractPair = { handle: string; contractAddress: string };
+type PublicDecryptResults = Awaited<ReturnType<FhevmInstance["publicDecrypt"]>>;
+
+let sdkReady = false;
 let fhevmInstance: FhevmInstance | null = null;
 
-export async function getOrCreateFhevmInstance(provider: BrowserProvider): Promise<FhevmInstance> {
-  if (fhevmInstance) return fhevmInstance;
+async function loadRelayerModule() {
+  return import("@zama-fhe/relayer-sdk/web");
+}
 
-  const network = await provider.getNetwork();
-  const chainId = Number(network.chainId);
+async function ensureSdkReady() {
+  if (!sdkReady) {
+    const { initSDK } = await loadRelayerModule();
+    await initSDK();
+    sdkReady = true;
+  }
+}
 
-  // Sepolia fhEVM contract addresses (from ZamaFHEVMConfig)
-  const kmsContractAddress = "0x9D6891A6240D6130c54ae243d8005063D05fE14b";
-  const aclContractAddress = "0xFee8407e2f5e3Ee68ad77cAE98c434e637f516e5";
+function relayerAuth() {
+  return process.env.NEXT_PUBLIC_ZAMA_RELAYER_API_KEY
+    ? { __type: "ApiKeyHeader" as const, value: process.env.NEXT_PUBLIC_ZAMA_RELAYER_API_KEY }
+    : undefined;
+}
+
+function normalizeHandle(handle: bigint | string) {
+  if (typeof handle === "string") {
+    if (handle.startsWith("0x")) {
+      return zeroPadValue(handle, 32);
+    }
+
+    return zeroPadValue(toBeHex(BigInt(handle)), 32);
+  }
+
+  return zeroPadValue(toBeHex(handle), 32);
+}
+
+async function resolveRelayerNetwork(providerLike?: unknown) {
+  if (process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL) {
+    return process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL;
+  }
+
+  return (providerLike ?? await getActiveWalletProvider()) as any;
+}
+
+export async function getOrCreateFhevmInstance(providerLike?: unknown): Promise<FhevmInstance> {
+  if (fhevmInstance) {
+    return fhevmInstance;
+  }
+
+  await ensureSdkReady();
+  const { SepoliaConfig, createInstance } = await loadRelayerModule();
 
   fhevmInstance = await createInstance({
-    kmsContractAddress,
-    aclContractAddress,
-    chainId,
-    network: provider,
+    ...SepoliaConfig,
+    network: await resolveRelayerNetwork(providerLike),
+    auth: relayerAuth(),
   });
 
   return fhevmInstance;
 }
 
-export async function encryptAmount(
+export async function encryptUint64(
   inst: FhevmInstance,
   contractAddress: string,
   userAddress: string,
-  amount: bigint
+  amount: bigint,
 ): Promise<{ handle: string; inputProof: Uint8Array }> {
-  const input = inst.createEncryptedInput(contractAddress, userAddress);
-  input.add64(amount);
-  const { handles, inputProof } = await input.encrypt();
-  const handle = "0x" + Buffer.from(handles[0]).toString("hex").padStart(64, "0");
-  return { handle, inputProof };
+  const buffer = inst.createEncryptedInput(contractAddress, userAddress);
+  buffer.add64(amount);
+
+  const { handles, inputProof } = await buffer.encrypt({ auth: relayerAuth() });
+
+  return {
+    handle: normalizeHandle(hexlify(handles[0])),
+    inputProof,
+  };
+}
+
+export const encryptAmount = encryptUint64;
+
+export async function userDecryptUint64s(
+  inst: FhevmInstance,
+  signer: DecryptSigner,
+  userAddress: string,
+  handles: HandleContractPair[],
+  contractAddresses: string[],
+): Promise<Record<string, bigint>> {
+  const keypair = inst.generateKeypair();
+  const startTimestamp = Math.floor(Date.now() / 1000);
+  const durationDays = 1;
+  const eip712 = inst.createEIP712(
+    keypair.publicKey,
+    contractAddresses,
+    startTimestamp,
+    durationDays,
+  );
+
+  const signature = await signer.signTypedData(
+    eip712.domain,
+    {
+      UserDecryptRequestVerification: eip712.types.UserDecryptRequestVerification as any,
+    } as any,
+    eip712.message as any,
+  );
+
+  const decrypted = await inst.userDecrypt(
+    handles,
+    keypair.privateKey,
+    keypair.publicKey,
+    signature,
+    contractAddresses,
+    userAddress,
+    startTimestamp,
+    durationDays,
+    { auth: relayerAuth() },
+  );
+
+  const entries = Object.entries(decrypted).map(([handle, value]) => [
+    normalizeHandle(handle),
+    BigInt(value as string | number | bigint | boolean),
+  ]);
+  return Object.fromEntries(entries);
 }
 
 export async function reencryptBalance(
   inst: FhevmInstance,
-  signer: { address: string; signTypedData: (domain: object, types: object, value: object) => Promise<string> },
+  signer: DecryptSigner,
   contractAddress: string,
-  handle: bigint
-): Promise<bigint> {
-  const { publicKey, privateKey } = inst.generateKeypair();
-  const eip712 = inst.createEIP712(publicKey, contractAddress);
-  const signature = await signer.signTypedData(
-    eip712.domain,
-    { Reencrypt: eip712.types.Reencrypt },
-    eip712.message
+  handle: bigint | string,
+) {
+  const userAddress = "getAddress" in signer ? await signer.getAddress() : signer.address;
+  const normalizedHandle = normalizeHandle(handle);
+  const decrypted = await userDecryptUint64s(
+    inst,
+    signer,
+    userAddress,
+    [{ handle: normalizedHandle, contractAddress }],
+    [contractAddress],
   );
-  return inst.reencrypt(handle, privateKey, publicKey, signature, contractAddress, signer.address);
+
+  return decrypted[normalizedHandle];
 }
 
-export function resetFhevmInstance(): void {
+export async function publicDecryptHandles(
+  inst: FhevmInstance,
+  handles: string[],
+): Promise<PublicDecryptResults> {
+  return inst.publicDecrypt(handles, { auth: relayerAuth() });
+}
+
+export async function publicDecryptUint64s(
+  inst: FhevmInstance,
+  handles: string[],
+): Promise<Record<string, bigint>> {
+  const decrypted = await publicDecryptHandles(inst, handles);
+  const entries = Object.entries(decrypted.clearValues).map(([handle, value]) => [
+    normalizeHandle(handle),
+    BigInt(value as string | number | bigint | boolean),
+  ]);
+  return Object.fromEntries(entries);
+}
+
+export function resetFhevmInstance() {
   fhevmInstance = null;
 }

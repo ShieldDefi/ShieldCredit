@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "fhevm/lib/TFHE.sol";
-import "fhevm/config/ZamaFHEVMConfig.sol";
-import "fhevm/config/ZamaGatewayConfig.sol";
+import "@fhevm/solidity/lib/FHE.sol";
+import "@fhevm/solidity/config/ZamaConfig.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./interfaces/ICreditScore.sol";
 
 /// @title CreditScore
 /// @notice Manages confidential credit scores for borrowers using fhEVM
-contract CreditScore is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, Ownable, ReentrancyGuard, ICreditScore {
+contract CreditScore is ZamaEthereumConfig, Ownable, ReentrancyGuard, ICreditScore {
     mapping(address => euint32) private _scores;
     mapping(address => bool) public initialized;
 
@@ -41,7 +40,7 @@ contract CreditScore is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, Ownabl
         );
         require(!initialized[borrower], "CreditScore: already initialized");
 
-        euint32 score = TFHE.asEuint32(DEFAULT_SCORE);
+        euint32 score = FHE.asEuint32(DEFAULT_SCORE);
         _scores[borrower] = score;
         initialized[borrower] = true;
 
@@ -53,26 +52,26 @@ contract CreditScore is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, Ownabl
     /// @notice Update a borrower's credit score (only oracle)
     function updateScore(
         address borrower,
-        einput encryptedDelta,
+        externalEuint32 encryptedDelta,
         bytes calldata inputProof,
         bool positive
     ) external override nonReentrant {
         require(msg.sender == scoringOracle, "CreditScore: not oracle");
         require(initialized[borrower], "CreditScore: score not initialized");
 
-        euint32 delta = TFHE.asEuint32(encryptedDelta, inputProof);
+        euint32 delta = FHE.fromExternal(encryptedDelta, inputProof);
         euint32 current = _scores[borrower];
 
         euint32 updated;
         if (positive) {
-            euint32 added = TFHE.add(current, delta);
-            updated = TFHE.min(added, TFHE.asEuint32(MAX_SCORE));
+            euint32 added = FHE.add(current, delta);
+            updated = FHE.min(added, FHE.asEuint32(MAX_SCORE));
         } else {
-            // Use TFHE.select to avoid underflow: if delta > current, clamp to MIN_SCORE
-            ebool underflows = TFHE.gt(delta, current);
-            euint32 subtracted = TFHE.sub(current, delta);
-            euint32 safeResult = TFHE.max(subtracted, TFHE.asEuint32(MIN_SCORE));
-            updated = TFHE.select(underflows, TFHE.asEuint32(MIN_SCORE), safeResult);
+            // Use FHE.select to avoid underflow: if delta > current, clamp to MIN_SCORE.
+            ebool underflows = FHE.gt(delta, current);
+            euint32 subtracted = FHE.sub(current, delta);
+            euint32 safeResult = FHE.max(subtracted, FHE.asEuint32(MIN_SCORE));
+            updated = FHE.select(underflows, FHE.asEuint32(MIN_SCORE), safeResult);
         }
 
         _scores[borrower] = updated;
@@ -87,9 +86,9 @@ contract CreditScore is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, Ownabl
         require(msg.sender == lendingContract, "CreditScore: only lending contract");
         require(initialized[borrower], "CreditScore: not initialized");
 
-        euint32 penalty = TFHE.asEuint32(penaltyPoints);
-        euint32 subtracted = TFHE.sub(_scores[borrower], penalty);
-        _scores[borrower] = TFHE.max(subtracted, TFHE.asEuint32(MIN_SCORE));
+        euint32 penalty = FHE.asEuint32(penaltyPoints);
+        euint32 subtracted = FHE.sub(_scores[borrower], penalty);
+        _scores[borrower] = FHE.max(subtracted, FHE.asEuint32(MIN_SCORE));
         _allowScore(borrower);
 
         emit ScoreUpdated(borrower, false);
@@ -98,9 +97,9 @@ contract CreditScore is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, Ownabl
     /// @notice Check whether a borrower's score meets a minimum threshold
     function isEligible(address borrower, uint32 minimum) external override returns (ebool) {
         require(initialized[borrower], "CreditScore: not initialized");
-        ebool eligible = TFHE.ge(_scores[borrower], TFHE.asEuint32(minimum));
-        TFHE.allow(eligible, lendingContract);
-        TFHE.allowThis(eligible);
+        ebool eligible = FHE.ge(_scores[borrower], FHE.asEuint32(minimum));
+        FHE.allow(eligible, lendingContract);
+        FHE.allowThis(eligible);
         return eligible;
     }
 
@@ -117,13 +116,13 @@ contract CreditScore is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, Ownabl
 
     /// @dev Re-allow score handle for borrower, lending contract, oracle, and this contract
     function _allowScore(address borrower) internal {
-        TFHE.allow(_scores[borrower], borrower);
-        TFHE.allowThis(_scores[borrower]);
+        FHE.allow(_scores[borrower], borrower);
+        FHE.allowThis(_scores[borrower]);
         if (lendingContract != address(0)) {
-            TFHE.allow(_scores[borrower], lendingContract);
+            FHE.allow(_scores[borrower], lendingContract);
         }
         if (scoringOracle != address(0)) {
-            TFHE.allow(_scores[borrower], scoringOracle);
+            FHE.allow(_scores[borrower], scoringOracle);
         }
     }
 }

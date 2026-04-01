@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "fhevm/lib/TFHE.sol";
+import "@fhevm/solidity/lib/FHE.sol";
 
 interface IPrivateLending {
     enum LoanStatus {
@@ -18,13 +18,13 @@ interface IPrivateLending {
 
     function requestLoan(
         uint256 assetId,
-        einput encryptedLoanAmount,
+        externalEuint64 encryptedLoanAmount,
         bytes calldata inputProof
     ) external returns (uint256 loanId);
 
     function repayLoan(
         uint256 loanId,
-        einput encryptedAmount,
+        externalEuint64 encryptedAmount,
         bytes calldata inputProof
     ) external;
 

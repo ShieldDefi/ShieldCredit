@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import AppProviders from "../components/AppProviders";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
-
 export const metadata: Metadata = {
-  title: "ShieldCredit | Confidential RWA-Backed Lending",
+  title: "ShieldCredit",
   description:
-    "A confidential RWA-backed lending protocol powered by Zama fhEVM. Borrow stablecoins against real-world assets with fully encrypted loan terms.",
+    "Confidential RWA-backed lending powered by Zama fhEVM on Sepolia.",
+  icons: {
+    icon: [{ url: "/shieldcredit-favicon.svg", type: "image/svg+xml" }],
+    shortcut: ["/shieldcredit-favicon.svg"],
+  },
 };
 
 export default function RootLayout({
@@ -17,7 +19,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body>
+        <AppProviders>{children}</AppProviders>
+      </body>
     </html>
   );
 }

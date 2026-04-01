@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "fhevm/lib/TFHE.sol";
-import "fhevm/config/ZamaFHEVMConfig.sol";
-import "fhevm/config/ZamaGatewayConfig.sol";
+import "@fhevm/solidity/lib/FHE.sol";
+import "@fhevm/solidity/config/ZamaConfig.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./interfaces/IRWARegistry.sol";
 
 /// @title RWARegistry
 /// @notice Registry for Real-World Assets with encrypted face values
-contract RWARegistry is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, Ownable, ReentrancyGuard, IRWARegistry {
+contract RWARegistry is ZamaEthereumConfig, Ownable, ReentrancyGuard, IRWARegistry {
     struct Asset {
         euint64 faceValue;
         AssetType assetType;
@@ -25,6 +24,7 @@ contract RWARegistry is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, Ownabl
     uint256 private _nextAssetId;
     mapping(address => bool) public whitelistedIssuers;
     address public auditor;
+    address public lendingContract;
     mapping(address => uint256[]) public issuerAssets;
 
     // Track all asset IDs for re-allow on auditor change
@@ -44,31 +44,44 @@ contract RWARegistry is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, Ownabl
         uint256 limit = total > 100 ? 100 : total;
         for (uint256 i = 0; i < limit; i++) {
             uint256 assetId = _allAssetIds[total - limit + i];
-            TFHE.allow(_assets[assetId].faceValue, _auditor);
+            FHE.allow(_assets[assetId].faceValue, _auditor);
+        }
+    }
+
+    /// @notice Set the authorized lending contract used for loan origination
+    function setLendingContract(address _lendingContract) external override onlyOwner {
+        require(_lendingContract != address(0), "RWARegistry: zero address");
+        lendingContract = _lendingContract;
+
+        uint256 total = _allAssetIds.length;
+        uint256 limit = total > 100 ? 100 : total;
+        for (uint256 i = 0; i < limit; i++) {
+            uint256 assetId = _allAssetIds[total - limit + i];
+            FHE.allow(_assets[assetId].faceValue, _lendingContract);
         }
     }
 
     /// @notice Register a new RWA with an encrypted face value
     function registerAsset(
-        einput encryptedFaceValue,
+        externalEuint64 encryptedFaceValue,
         bytes calldata inputProof,
         AssetType assetType,
         string calldata metadataURI
     ) external override nonReentrant returns (uint256 assetId) {
         require(whitelistedIssuers[msg.sender], "RWARegistry: issuer not whitelisted");
 
-        euint64 faceValue = TFHE.asEuint64(encryptedFaceValue, inputProof);
-        ebool isPositive = TFHE.gt(faceValue, TFHE.asEuint64(0));
-        require(TFHE.isInitialized(faceValue), "RWARegistry: invalid face value");
+        euint64 faceValue = FHE.fromExternal(encryptedFaceValue, inputProof);
+        require(FHE.isInitialized(faceValue), "RWARegistry: invalid face value");
 
         // Allow access for owner, auditor, and this contract
-        TFHE.allow(faceValue, msg.sender);
-        TFHE.allowThis(faceValue);
+        FHE.allow(faceValue, msg.sender);
+        FHE.allowThis(faceValue);
         if (auditor != address(0)) {
-            TFHE.allow(faceValue, auditor);
+            FHE.allow(faceValue, auditor);
         }
-        // Allow isPositive for this contract
-        TFHE.allowThis(isPositive);
+        if (lendingContract != address(0)) {
+            FHE.allow(faceValue, lendingContract);
+        }
 
         assetId = _nextAssetId++;
         _assets[assetId] = Asset({
@@ -98,10 +111,13 @@ contract RWARegistry is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, Ownabl
         address previousOwner = asset.owner;
         asset.owner = newOwner;
 
-        TFHE.allow(asset.faceValue, newOwner);
-        TFHE.allowThis(asset.faceValue);
+        FHE.allow(asset.faceValue, newOwner);
+        FHE.allowThis(asset.faceValue);
         if (auditor != address(0)) {
-            TFHE.allow(asset.faceValue, auditor);
+            FHE.allow(asset.faceValue, auditor);
+        }
+        if (lendingContract != address(0)) {
+            FHE.allow(asset.faceValue, lendingContract);
         }
 
         emit AssetTransferred(assetId, previousOwner, newOwner);
@@ -120,10 +136,13 @@ contract RWARegistry is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, Ownabl
         asset.locked = false;
         asset.lockedBy = address(0);
 
-        TFHE.allow(asset.faceValue, newOwner);
-        TFHE.allowThis(asset.faceValue);
+        FHE.allow(asset.faceValue, newOwner);
+        FHE.allowThis(asset.faceValue);
         if (auditor != address(0)) {
-            TFHE.allow(asset.faceValue, auditor);
+            FHE.allow(asset.faceValue, auditor);
+        }
+        if (lendingContract != address(0)) {
+            FHE.allow(asset.faceValue, lendingContract);
         }
 
         emit AssetTransferred(assetId, previousOwner, newOwner);
@@ -132,14 +151,18 @@ contract RWARegistry is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, Ownabl
 
     function lockAsset(uint256 assetId, address _lendingContract) external override nonReentrant {
         Asset storage asset = _assets[assetId];
-        require(asset.owner == msg.sender, "RWARegistry: not asset owner");
+        require(
+            msg.sender == asset.owner || msg.sender == lendingContract,
+            "RWARegistry: not authorized to lock"
+        );
         require(!asset.locked, "RWARegistry: already locked");
         require(_lendingContract != address(0), "RWARegistry: zero address");
+        require(_lendingContract == lendingContract, "RWARegistry: unsupported lending contract");
 
         asset.locked = true;
         asset.lockedBy = _lendingContract;
 
-        TFHE.allow(asset.faceValue, _lendingContract);
+        FHE.allow(asset.faceValue, _lendingContract);
 
         emit AssetLocked(assetId, _lendingContract);
     }
@@ -162,7 +185,8 @@ contract RWARegistry is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, Ownabl
         require(
             msg.sender == asset.owner ||
             msg.sender == auditor ||
-            msg.sender == asset.lockedBy,
+            msg.sender == asset.lockedBy ||
+            msg.sender == lendingContract,
             "RWARegistry: not authorized"
         );
         return asset.faceValue;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "fhevm/lib/TFHE.sol";
+import "@fhevm/solidity/lib/FHE.sol";
 
 interface IRWARegistry {
     enum AssetType {
@@ -17,7 +17,7 @@ interface IRWARegistry {
     event AssetUnlocked(uint256 indexed assetId);
 
     function registerAsset(
-        einput encryptedFaceValue,
+        externalEuint64 encryptedFaceValue,
         bytes calldata inputProof,
         AssetType assetType,
         string calldata metadataURI
@@ -38,4 +38,6 @@ interface IRWARegistry {
     function whitelistIssuer(address issuer) external;
 
     function setAuditor(address auditor) external;
+
+    function setLendingContract(address lendingContract) external;
 }

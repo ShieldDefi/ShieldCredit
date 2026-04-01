@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "fhevm/lib/TFHE.sol";
-import "fhevm/config/ZamaFHEVMConfig.sol";
-import "fhevm/config/ZamaGatewayConfig.sol";
-import "fhevm/gateway/GatewayCaller.sol";
+import "@fhevm/solidity/lib/FHE.sol";
+import "@fhevm/solidity/config/ZamaConfig.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./interfaces/IPrivateLending.sol";
@@ -17,9 +15,7 @@ import "./CreditScore.sol";
 /// @title PrivateLending
 /// @notice Confidential RWA-backed lending protocol with encrypted loan terms
 contract PrivateLending is
-    SepoliaZamaFHEVMConfig,
-    SepoliaZamaGatewayConfig,
-    GatewayCaller,
+    ZamaEthereumConfig,
     Ownable,
     ReentrancyGuard,
     IPrivateLending
@@ -41,9 +37,8 @@ contract PrivateLending is
     uint256 private _nextLoanId;
     mapping(address => uint256[]) public borrowerLoans;
 
-    // Pending gateway callbacks
-    mapping(uint256 => uint256) private _repayRequestToLoan;
-    mapping(uint256 => uint256) private _liquidateRequestToLoan;
+    mapping(uint256 => ebool) private _pendingRepaymentStatus;
+    mapping(uint256 => ebool) private _pendingLiquidationDecision;
 
     address public regulator;
 
@@ -56,6 +51,9 @@ contract PrivateLending is
     RWARegistry public rwaRegistry;
     CreditScore public creditScore;
     ConfidentialStablecoin public stablecoin;
+
+    event RepaymentStatusRequested(uint256 indexed loanId, bytes32 indexed handle);
+    event LiquidationDecisionRequested(uint256 indexed loanId, bytes32 indexed handle);
 
     constructor(
         address _rwaRegistry,
@@ -81,7 +79,7 @@ contract PrivateLending is
     /// @notice Request a loan against a locked RWA asset
     function requestLoan(
         uint256 assetId,
-        einput encryptedLoanAmount,
+        externalEuint64 encryptedLoanAmount,
         bytes calldata inputProof
     ) external override nonReentrant returns (uint256 loanId) {
         require(
@@ -96,28 +94,30 @@ contract PrivateLending is
         }
 
         ebool eligible = creditScore.isEligible(msg.sender, MINIMUM_CREDIT_SCORE);
+        euint64 loanAmount = FHE.fromExternal(encryptedLoanAmount, inputProof);
+
+        // Locking first ensures the registry grants this contract ACL access to the collateral handle
+        // before any encrypted computations use it.
+        rwaRegistry.lockAsset(assetId, address(this));
         euint64 faceValue = rwaRegistry.getFaceValue(assetId);
-        euint64 loanAmount = TFHE.asEuint64(encryptedLoanAmount, inputProof);
 
         // Max loan = faceValue * MAX_LTV_BPS / 10000
-        euint64 maxLoan = TFHE.div(
-            TFHE.mul(faceValue, MAX_LTV_BPS),
+        euint64 maxLoan = FHE.div(
+            FHE.mul(faceValue, MAX_LTV_BPS),
             10000
         );
 
-        ebool validAmount = TFHE.le(loanAmount, maxLoan);
-        ebool approved = TFHE.and(eligible, validAmount);
+        ebool validAmount = FHE.le(loanAmount, maxLoan);
+        ebool approved = FHE.and(eligible, validAmount);
 
-        euint64 disbursement = TFHE.select(approved, loanAmount, TFHE.asEuint64(0));
+        euint64 disbursement = FHE.select(approved, loanAmount, FHE.asEuint64(0));
+        FHE.allow(disbursement, address(stablecoin));
 
         // Liquidation threshold = faceValue * LIQUIDATION_THRESHOLD_BPS / 10000
-        euint64 liqThreshold = TFHE.div(
-            TFHE.mul(faceValue, LIQUIDATION_THRESHOLD_BPS),
+        euint64 liqThreshold = FHE.div(
+            FHE.mul(faceValue, LIQUIDATION_THRESHOLD_BPS),
             10000
         );
-
-        // Lock collateral
-        rwaRegistry.lockAsset(assetId, address(this));
 
         loanId = _nextLoanId++;
         _loans[loanId] = Loan({
@@ -147,7 +147,7 @@ contract PrivateLending is
     /// @notice Repay a loan (partially or fully)
     function repayLoan(
         uint256 loanId,
-        einput encryptedAmount,
+        externalEuint64 encryptedAmount,
         bytes calldata inputProof
     ) external override nonReentrant {
         Loan storage loan = _loans[loanId];
@@ -156,45 +156,40 @@ contract PrivateLending is
 
         _accrueInterest(loanId);
 
-        euint64 repayAmount = TFHE.asEuint64(encryptedAmount, inputProof);
-        euint64 actualRepay = TFHE.min(repayAmount, loan.outstandingBalance);
+        euint64 repayAmount = FHE.fromExternal(encryptedAmount, inputProof);
+        euint64 actualRepay = FHE.min(repayAmount, loan.outstandingBalance);
+        FHE.allow(actualRepay, address(stablecoin));
 
-        loan.outstandingBalance = TFHE.sub(loan.outstandingBalance, actualRepay);
+        loan.outstandingBalance = FHE.sub(loan.outstandingBalance, actualRepay);
 
         _allowLoanFields(loanId);
 
         // Transfer stablecoin from borrower to this contract
         stablecoin.transferEncrypted(msg.sender, address(this), actualRepay);
 
-        // Request decryption to check if fully repaid
-        ebool isFullyRepaid = TFHE.eq(loan.outstandingBalance, TFHE.asEuint64(0));
-        TFHE.allowThis(isFullyRepaid);
+        ebool isFullyRepaid = FHE.eq(loan.outstandingBalance, FHE.asEuint64(0));
+        _pendingRepaymentStatus[loanId] = FHE.makePubliclyDecryptable(isFullyRepaid);
 
-        uint256[] memory handles = new uint256[](1);
-        handles[0] = Gateway.toUint256(isFullyRepaid);
-
-        uint256 requestId = Gateway.requestDecryption(
-            handles,
-            this.callbackRepay.selector,
-            0,
-            block.timestamp + 100,
-            false
-        );
-        _repayRequestToLoan[requestId] = loanId;
+        emit RepaymentStatusRequested(loanId, FHE.toBytes32(_pendingRepaymentStatus[loanId]));
     }
 
-    /// @notice Gateway callback for repayment — marks loan as REPAID if balance is zero
-    function callbackRepay(
-        uint256 requestId,
-        bool fullyRepaid,
-        bytes[] memory /*signatures*/
-    ) external {
-        require(msg.sender == Gateway.gatewayContractAddress(), "PrivateLending: invalid gateway");
-        uint256 loanId = _repayRequestToLoan[requestId];
-        delete _repayRequestToLoan[requestId];
+    /// @notice Finalize repayment after verifying the relayer public-decrypt proof for the repayment status.
+    function finalizeRepayment(
+        uint256 loanId,
+        bytes calldata abiEncodedCleartexts,
+        bytes calldata decryptionProof
+    ) external nonReentrant {
+        Loan storage loan = _loans[loanId];
+        bytes32 pendingHandle = FHE.toBytes32(_pendingRepaymentStatus[loanId]);
+        require(pendingHandle != bytes32(0), "PrivateLending: no pending repayment status");
 
+        bytes32[] memory handles = new bytes32[](1);
+        handles[0] = pendingHandle;
+        FHE.checkSignatures(handles, abiEncodedCleartexts, decryptionProof);
+        _pendingRepaymentStatus[loanId] = ebool.wrap(bytes32(0));
+
+        bool fullyRepaid = abi.decode(abiEncodedCleartexts, (bool));
         if (fullyRepaid) {
-            Loan storage loan = _loans[loanId];
             loan.status = LoanStatus.REPAID;
             rwaRegistry.unlockAsset(loan.assetId);
             emit LoanRepaid(loanId, loan.borrower);
@@ -208,34 +203,29 @@ contract PrivateLending is
 
         _accrueInterest(loanId);
 
-        ebool shouldLiquidate = TFHE.gt(loan.outstandingBalance, loan.liquidationThreshold);
-        TFHE.allowThis(shouldLiquidate);
+        ebool shouldLiquidate = FHE.gt(loan.outstandingBalance, loan.liquidationThreshold);
+        _pendingLiquidationDecision[loanId] = FHE.makePubliclyDecryptable(shouldLiquidate);
 
-        uint256[] memory handles = new uint256[](1);
-        handles[0] = Gateway.toUint256(shouldLiquidate);
-
-        uint256 requestId = Gateway.requestDecryption(
-            handles,
-            this.callbackLiquidate.selector,
-            0,
-            block.timestamp + 100,
-            false
-        );
-        _liquidateRequestToLoan[requestId] = loanId;
+        emit LiquidationDecisionRequested(loanId, FHE.toBytes32(_pendingLiquidationDecision[loanId]));
     }
 
-    /// @notice Gateway callback for liquidation
-    function callbackLiquidate(
-        uint256 requestId,
-        bool shouldLiquidate,
-        bytes[] memory /*signatures*/
-    ) external {
-        require(msg.sender == Gateway.gatewayContractAddress(), "PrivateLending: invalid gateway");
-        uint256 loanId = _liquidateRequestToLoan[requestId];
-        delete _liquidateRequestToLoan[requestId];
+    /// @notice Finalize liquidation after verifying the relayer public-decrypt proof for the liquidation decision.
+    function finalizeLiquidation(
+        uint256 loanId,
+        bytes calldata abiEncodedCleartexts,
+        bytes calldata decryptionProof
+    ) external nonReentrant {
+        Loan storage loan = _loans[loanId];
+        bytes32 pendingHandle = FHE.toBytes32(_pendingLiquidationDecision[loanId]);
+        require(pendingHandle != bytes32(0), "PrivateLending: no pending liquidation decision");
 
+        bytes32[] memory handles = new bytes32[](1);
+        handles[0] = pendingHandle;
+        FHE.checkSignatures(handles, abiEncodedCleartexts, decryptionProof);
+        _pendingLiquidationDecision[loanId] = ebool.wrap(bytes32(0));
+
+        bool shouldLiquidate = abi.decode(abiEncodedCleartexts, (bool));
         if (shouldLiquidate) {
-            Loan storage loan = _loans[loanId];
             address borrower = loan.borrower;
             loan.status = LoanStatus.LIQUIDATED;
 
@@ -259,15 +249,15 @@ contract PrivateLending is
 
         // interest = principal * rate * elapsed / (SECONDS_PER_YEAR * 10000)
         uint64 denominator = uint64(SECONDS_PER_YEAR) * 10000;
-        euint64 interest = TFHE.div(
-            TFHE.mul(
-                TFHE.mul(loan.principal, uint64(loan.interestRatePerYear)),
+        euint64 interest = FHE.div(
+            FHE.mul(
+                FHE.mul(loan.principal, uint64(loan.interestRatePerYear)),
                 uint64(elapsed)
             ),
             denominator
         );
 
-        loan.outstandingBalance = TFHE.add(loan.outstandingBalance, interest);
+        loan.outstandingBalance = FHE.add(loan.outstandingBalance, interest);
         loan.lastAccrualAt = block.timestamp;
 
         _allowLoanFields(loanId);
@@ -288,6 +278,19 @@ contract PrivateLending is
     /// @notice Get all loan IDs for a borrower
     function getBorrowerLoans(address borrower) external view override returns (uint256[] memory) {
         return borrowerLoans[borrower];
+    }
+
+    /// @notice Get the total number of loans ever created
+    function totalLoans() external view returns (uint256) {
+        return _nextLoanId;
+    }
+
+    function getPendingRepaymentStatusHandle(uint256 loanId) external view returns (bytes32) {
+        return FHE.toBytes32(_pendingRepaymentStatus[loanId]);
+    }
+
+    function getPendingLiquidationDecisionHandle(uint256 loanId) external view returns (bytes32) {
+        return FHE.toBytes32(_pendingLiquidationDecision[loanId]);
     }
 
     /// @notice Get public loan metadata (no encrypted fields)
@@ -343,21 +346,21 @@ contract PrivateLending is
         Loan storage loan = _loans[loanId];
         address borrower = loan.borrower;
 
-        TFHE.allow(loan.principal, borrower);
-        TFHE.allow(loan.outstandingBalance, borrower);
-        TFHE.allow(loan.collateralValue, borrower);
-        TFHE.allow(loan.liquidationThreshold, borrower);
+        FHE.allow(loan.principal, borrower);
+        FHE.allow(loan.outstandingBalance, borrower);
+        FHE.allow(loan.collateralValue, borrower);
+        FHE.allow(loan.liquidationThreshold, borrower);
 
-        TFHE.allowThis(loan.principal);
-        TFHE.allowThis(loan.outstandingBalance);
-        TFHE.allowThis(loan.collateralValue);
-        TFHE.allowThis(loan.liquidationThreshold);
+        FHE.allowThis(loan.principal);
+        FHE.allowThis(loan.outstandingBalance);
+        FHE.allowThis(loan.collateralValue);
+        FHE.allowThis(loan.liquidationThreshold);
 
         if (regulator != address(0)) {
-            TFHE.allow(loan.principal, regulator);
-            TFHE.allow(loan.outstandingBalance, regulator);
-            TFHE.allow(loan.collateralValue, regulator);
-            TFHE.allow(loan.liquidationThreshold, regulator);
+            FHE.allow(loan.principal, regulator);
+            FHE.allow(loan.outstandingBalance, regulator);
+            FHE.allow(loan.collateralValue, regulator);
+            FHE.allow(loan.liquidationThreshold, regulator);
         }
     }
 }
