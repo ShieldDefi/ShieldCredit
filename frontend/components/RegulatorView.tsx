@@ -5,9 +5,10 @@ import { ADDRESSES, getContracts, getSigner } from "../lib/contracts";
 import { normalizeError } from "../lib/errors";
 import { formatUsdMicro } from "../lib/format";
 import { getOrCreateFhevmInstance, reencryptBalance } from "../lib/fhevm";
-import { protocolConfig, getExplorerAddressUrl } from "../lib/protocol-config";
+import { getExplorerAddressUrl, protocolConfig } from "../lib/protocol-config";
 
 interface AuditReport {
+  loanId: bigint;
   borrower: string;
   principal: bigint;
   outstandingBalance: bigint;
@@ -20,7 +21,7 @@ export default function RegulatorView() {
   const [auditReport, setAuditReport] = useState<AuditReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleAudit(event: React.FormEvent) {
+  const handleAudit = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsLoading(true);
     setError(null);
@@ -34,25 +35,26 @@ export default function RegulatorView() {
 
       const { signer, address } = await getSigner();
       const contracts = getContracts(signer);
-      const liveRegulator = await contracts.privateLending.regulator();
+      const regulatorAddress = await contracts.privateLending.regulator();
 
-      if (address.toLowerCase() !== liveRegulator.toLowerCase()) {
-        throw new Error("Only the designated regulator wallet can decrypt compliance fields.");
+      if (address.toLowerCase() !== regulatorAddress.toLowerCase()) {
+        throw new Error("Access denied: Only the designated regulator can use this view.");
       }
 
       const inst = await getOrCreateFhevmInstance();
-      const loanIdBigInt = BigInt(loanIdValue);
-      const [principalHandle, outstandingHandle, , thresholdHandle] =
-        await contracts.privateLending.getEncryptedLoanFields(loanIdBigInt);
-      const loanInfo = await contracts.privateLending.getLoanInfo(loanIdBigInt);
+      const loanIdBig = BigInt(loanIdValue);
+      const [principalHandle, outstandingHandle, , liquidationHandle] =
+        await contracts.privateLending.getEncryptedLoanFields(loanIdBig);
+      const loanInfo = await contracts.privateLending.getLoanInfo(loanIdBig);
 
       const [principal, outstandingBalance, liquidationThreshold] = await Promise.all([
         reencryptBalance(inst, signer, ADDRESSES.privateLending, principalHandle),
         reencryptBalance(inst, signer, ADDRESSES.privateLending, outstandingHandle),
-        reencryptBalance(inst, signer, ADDRESSES.privateLending, thresholdHandle),
+        reencryptBalance(inst, signer, ADDRESSES.privateLending, liquidationHandle),
       ]);
 
       setAuditReport({
+        loanId: loanIdBig,
         borrower: loanInfo.borrower,
         principal,
         outstandingBalance,
@@ -63,83 +65,98 @@ export default function RegulatorView() {
     } finally {
       setIsLoading(false);
     }
-  }
+  };
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-950/70 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.45)]">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.22em] text-cyan-300">Compliance</p>
-          <h2 className="mt-2 text-2xl font-semibold text-white">Regulator-only disclosure</h2>
-          <p className="mt-2 max-w-3xl text-sm text-slate-400">
-            Loan principal, outstanding balance, and liquidation threshold remain encrypted until the
-            designated regulator wallet decrypts them.
-          </p>
-        </div>
-        <a
-          href={getExplorerAddressUrl(protocolConfig.roles.regulator)}
-          target="_blank"
-          rel="noreferrer"
-          className="text-sm text-cyan-300 transition hover:text-cyan-200"
-        >
-          Regulator address
-        </a>
+    <div className="w-full max-w-2xl rounded-xl border border-gray-800 bg-gray-900 p-6">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-xl text-yellow-400">⚠️</span>
+        <h2 className="text-xl font-bold text-white">Regulator Access — Selective Decryption Only</h2>
       </div>
+      <p className="mb-2 text-sm text-gray-400">
+        Access is traceable on-chain. Available only to the designated regulator address.
+      </p>
+      <a
+        href={getExplorerAddressUrl(protocolConfig.roles.regulator)}
+        target="_blank"
+        rel="noreferrer"
+        className="mb-6 inline-block text-xs text-yellow-300 transition hover:text-yellow-200"
+      >
+        View regulator address
+      </a>
 
-      <form onSubmit={handleAudit} className="mt-6 grid gap-4 lg:grid-cols-[1fr_auto]">
-        <input
-          type="number"
-          min="0"
-          value={loanId}
-          onChange={(event) => setLoanId(event.target.value)}
-          placeholder="Loan ID"
-          required
-          className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400"
-        />
+      <form onSubmit={handleAudit} className="mb-6 space-y-4">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-300">Loan ID</label>
+          <input
+            type="number"
+            value={loanId}
+            onChange={(event) => setLoanId(event.target.value)}
+            placeholder="e.g. 0"
+            min="0"
+            required
+            className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+          />
+        </div>
+
         <button
           type="submit"
           disabled={isLoading}
-          className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-slate-200 disabled:opacity-50"
+          className="w-full rounded-lg bg-gradient-to-r from-yellow-600 to-orange-600 py-2.5 font-semibold text-white transition-all duration-200 hover:from-yellow-700 hover:to-orange-700 disabled:opacity-50"
         >
-          {isLoading ? "Decrypting..." : "Load compliance view"}
+          {isLoading ? (
+            <span className="flex items-center justify-center gap-2">
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Auditing...
+            </span>
+          ) : (
+            "Generate Audit Report"
+          )}
         </button>
       </form>
 
-      {error && <p className="mt-4 text-sm text-rose-200">{error}</p>}
-
-      {auditReport && (
-        <div className="mt-6 grid gap-4 md:grid-cols-4">
-          <AuditMetric label="Borrower" value={auditReport.borrower} mono />
-          <AuditMetric label="Principal" value={`${formatUsdMicro(auditReport.principal)} sUSD`} />
-          <AuditMetric
-            label="Outstanding"
-            value={`${formatUsdMicro(auditReport.outstandingBalance)} sUSD`}
-          />
-          <AuditMetric
-            label="Liquidation Threshold"
-            value={`${formatUsdMicro(auditReport.liquidationThreshold)} sUSD`}
-          />
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-700 bg-red-900/30 p-4">
+          <p className="text-sm text-red-300">❌ {error}</p>
         </div>
       )}
-    </section>
-  );
-}
 
-function AuditMetric({
-  label,
-  value,
-  mono = false,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{label}</p>
-      <p className={`mt-3 text-sm text-white ${mono ? "font-mono break-all" : "font-semibold"}`}>
-        {value}
-      </p>
+      {auditReport && (
+        <div className="rounded-xl border border-yellow-700/50 bg-yellow-900/10 p-5">
+          <h3 className="mb-4 font-bold text-yellow-300">📋 Audit Report</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-400">Loan ID</span>
+              <span className="font-mono text-white">{auditReport.loanId.toString()}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-400">Borrower</span>
+              <span className="font-mono text-xs text-white">{auditReport.borrower}</span>
+            </div>
+            <hr className="border-gray-700" />
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-400">Principal</span>
+              <span className="text-white">{formatUsdMicro(auditReport.principal)} sUSD</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-400">Outstanding Balance</span>
+              <span className="text-yellow-300">{formatUsdMicro(auditReport.outstandingBalance)} sUSD</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-400">Liquidation Threshold</span>
+              <span className="text-red-300">
+                {formatUsdMicro(auditReport.liquidationThreshold)} sUSD
+              </span>
+            </div>
+          </div>
+          <p className="mt-4 text-xs text-gray-500">
+            ⚠️ Access traceable on-chain. Available only to the designated regulator address.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
