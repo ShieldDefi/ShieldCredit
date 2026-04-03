@@ -1,73 +1,76 @@
-import { BrowserProvider, Contract, JsonRpcSigner, JsonRpcProvider } from "ethers";
+import { BrowserProvider, Contract, JsonRpcProvider, JsonRpcSigner, isAddress } from "ethers";
+import { protocolConfig } from "./protocol-config";
 import { getActiveWalletProvider, targetChain } from "./wagmi";
 
-// ABIs — minimal ABIs for the contracts we need
 const RWA_REGISTRY_ABI = [
-  "function registerAsset(bytes32 encryptedFaceValue, bytes inputProof, uint8 assetType, string metadataURI) external returns (uint256)",
-  "function transferAsset(uint256 assetId, address newOwner) external",
-  "function lockAsset(uint256 assetId, address lendingContract) external",
-  "function unlockAsset(uint256 assetId) external",
-  "function getFaceValue(uint256 assetId) external view returns (uint256)",
-  "function getAssetOwner(uint256 assetId) external view returns (address)",
-  "function isLocked(uint256 assetId) external view returns (bool)",
-  "function getAsset(uint256 assetId) external view returns (uint8, address, bool, address, string, uint256)",
-  "function totalAssets() external view returns (uint256)",
-  "function issuerAssets(address, uint256) external view returns (uint256)",
+  "function registerAsset(bytes32 encryptedFaceValue, bytes inputProof, uint8 assetType, string metadataURI) external returns (uint256 assetId)",
+  "function getFaceValue(uint256 assetId) external view returns (uint256 faceValue)",
+  "function getAssetOwner(uint256 assetId) external view returns (address owner)",
+  "function isLocked(uint256 assetId) external view returns (bool locked)",
+  "function getAsset(uint256 assetId) external view returns (uint8 assetType, address assetOwner, bool locked, address lockedBy, string metadataURI, uint256 registeredAt)",
+  "function totalAssets() external view returns (uint256 total)",
   "event AssetRegistered(uint256 indexed assetId, address indexed owner, uint8 assetType)",
-];
+] as const;
 
 const CREDIT_SCORE_ABI = [
-  "function initialized(address) external view returns (bool)",
-  "function getEncryptedScore(address borrower) external view returns (uint256)",
-  "function isEligible(address borrower, uint32 minimum) external returns (uint256)",
-  "function initializeScore(address borrower) external",
-  "function updateScore(address borrower, bytes32 encryptedDelta, bytes inputProof, bool positive) external",
-];
+  "function initialized(address) external view returns (bool initialized)",
+  "function getEncryptedScore(address borrower) external view returns (uint256 scoreHandle)",
+] as const;
 
 const PRIVATE_LENDING_ABI = [
-  "function requestLoan(uint256 assetId, bytes32 encryptedLoanAmount, bytes inputProof) external returns (uint256)",
+  "function requestLoan(uint256 assetId, bytes32 encryptedLoanAmount, bytes inputProof) external returns (uint256 loanId)",
   "function repayLoan(uint256 loanId, bytes32 encryptedAmount, bytes inputProof) external",
   "function finalizeRepayment(uint256 loanId, bytes abiEncodedCleartexts, bytes decryptionProof) external",
   "function checkAndLiquidate(uint256 loanId) external",
   "function finalizeLiquidation(uint256 loanId, bytes abiEncodedCleartexts, bytes decryptionProof) external",
   "function accrueInterest(uint256 loanId) external",
-  "function totalLoans() external view returns (uint256)",
-  "function getLoanStatus(uint256 loanId) external view returns (uint8)",
-  "function getBorrowerLoans(address borrower) external view returns (uint256[])",
+  "function totalLoans() external view returns (uint256 total)",
+  "function getLoanStatus(uint256 loanId) external view returns (uint8 status)",
+  "function getBorrowerLoans(address borrower) external view returns (uint256[] loanIds)",
   "function getLoanInfo(uint256 loanId) external view returns (uint256 assetId, address borrower, uint8 status, uint256 createdAt, uint256 lastAccrualAt, uint32 interestRatePerYear)",
-  "function getEncryptedLoanFields(uint256 loanId) external view returns (uint256, uint256, uint256, uint256)",
-  "function getPendingRepaymentStatusHandle(uint256 loanId) external view returns (bytes32)",
-  "function getPendingLiquidationDecisionHandle(uint256 loanId) external view returns (bytes32)",
-  "function regulator() external view returns (address)",
+  "function getEncryptedLoanFields(uint256 loanId) external view returns (uint256 principal, uint256 outstandingBalance, uint256 collateralValue, uint256 liquidationThreshold)",
+  "function getPendingRepaymentStatusHandle(uint256 loanId) external view returns (bytes32 handle)",
+  "function getPendingLiquidationDecisionHandle(uint256 loanId) external view returns (bytes32 handle)",
+  "function regulator() external view returns (address regulatorAddress)",
   "event LoanCreated(uint256 indexed loanId, address indexed borrower, uint256 indexed assetId)",
   "event LoanRepaid(uint256 indexed loanId, address indexed borrower)",
   "event LoanLiquidated(uint256 indexed loanId, address indexed borrower)",
   "event InterestAccrued(uint256 indexed loanId, uint256 timestamp)",
-];
+] as const;
 
 const STABLECOIN_ABI = [
-  "function balanceOf(address account) external view returns (uint256)",
-  "function totalSupply() external view returns (uint256)",
+  "function balanceOf(address account) external view returns (uint256 balanceHandle)",
+  "function totalSupply() external view returns (uint256 totalSupplyHandle)",
   "function transfer(address to, bytes32 encryptedAmount, bytes inputProof) external",
-  "function name() external view returns (string)",
-  "function symbol() external view returns (string)",
-  "function decimals() external view returns (uint8)",
-];
+  "function name() external view returns (string tokenName)",
+  "function symbol() external view returns (string tokenSymbol)",
+  "function decimals() external view returns (uint8 tokenDecimals)",
+] as const;
 
 const STABLECOIN_FAUCET_ABI = [
   "function mint(address recipient, bytes32 encryptedAmount, bytes inputProof) external",
   "function mintToSelf(bytes32 encryptedAmount, bytes inputProof) external",
-];
+] as const;
 
-export const ADDRESSES = {
-  rwaRegistry: process.env.NEXT_PUBLIC_RWA_REGISTRY_ADDRESS ?? "",
-  creditScore: process.env.NEXT_PUBLIC_CREDIT_SCORE_ADDRESS ?? "",
-  privateLending: process.env.NEXT_PUBLIC_PRIVATE_LENDING_ADDRESS ?? "",
-  stablecoin: process.env.NEXT_PUBLIC_STABLECOIN_ADDRESS ?? "",
-  stablecoinFaucet: process.env.NEXT_PUBLIC_STABLECOIN_FAUCET_ADDRESS ?? "",
-};
+export const ADDRESSES = protocolConfig.contracts;
+
+function assertConfiguredAddress(label: string, address: string) {
+  if (!isAddress(address)) {
+    throw new Error(`ShieldCredit ${label} address is unavailable in this build.`);
+  }
+}
+
+function assertDeploymentAddresses() {
+  assertConfiguredAddress("RWA Registry", ADDRESSES.rwaRegistry);
+  assertConfiguredAddress("Credit Score", ADDRESSES.creditScore);
+  assertConfiguredAddress("Private Lending", ADDRESSES.privateLending);
+  assertConfiguredAddress("Stablecoin", ADDRESSES.stablecoin);
+  assertConfiguredAddress("Stablecoin Faucet", ADDRESSES.stablecoinFaucet);
+}
 
 export function getContracts(signerOrProvider: JsonRpcSigner | BrowserProvider | JsonRpcProvider) {
+  assertDeploymentAddresses();
+
   return {
     rwaRegistry: new Contract(ADDRESSES.rwaRegistry, RWA_REGISTRY_ABI, signerOrProvider),
     creditScore: new Contract(ADDRESSES.creditScore, CREDIT_SCORE_ABI, signerOrProvider),
@@ -77,19 +80,17 @@ export function getContracts(signerOrProvider: JsonRpcSigner | BrowserProvider |
   };
 }
 
+let readProvider: JsonRpcProvider | null = null;
+
 export function getReadProvider() {
-  if (process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL) {
-    return new JsonRpcProvider(process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL);
+  if (!readProvider) {
+    readProvider = new JsonRpcProvider(protocolConfig.rpcUrl);
   }
 
-  if (typeof window !== "undefined" && window.ethereum) {
-    return new BrowserProvider(window.ethereum);
-  }
-
-  throw new Error("Missing NEXT_PUBLIC_SEPOLIA_RPC_URL for public protocol reads.");
+  return readProvider;
 }
 
-export async function getBrowserProvider(providerLike?: any): Promise<BrowserProvider> {
+export async function getBrowserProvider(providerLike?: unknown): Promise<BrowserProvider> {
   if (providerLike instanceof BrowserProvider) {
     return providerLike;
   }
@@ -100,12 +101,12 @@ export async function getBrowserProvider(providerLike?: any): Promise<BrowserPro
     throw new Error("No injected wallet found. Install a supported wallet and reconnect.");
   }
 
-  return new BrowserProvider(resolvedProvider);
+  return new BrowserProvider(resolvedProvider as any);
 }
 
 export async function assertExpectedNetwork(provider: BrowserProvider) {
   const network = await provider.getNetwork();
-  const expectedChainId = BigInt(process.env.NEXT_PUBLIC_CHAIN_ID ?? "11155111");
+  const expectedChainId = BigInt(protocolConfig.chainId);
 
   if (network.chainId !== expectedChainId) {
     throw new Error(
@@ -116,7 +117,7 @@ export async function assertExpectedNetwork(provider: BrowserProvider) {
   return network;
 }
 
-export async function getSigner(providerLike?: any): Promise<{
+export async function getSigner(providerLike?: unknown): Promise<{
   signer: JsonRpcSigner;
   address: string;
   provider: BrowserProvider;
@@ -129,11 +130,11 @@ export async function getSigner(providerLike?: any): Promise<{
 }
 
 export function hasDeploymentAddresses() {
-  return Object.values(ADDRESSES).every(Boolean);
+  return Object.values(ADDRESSES).every((value) => isAddress(value));
 }
 
 declare global {
   interface Window {
-    ethereum?: any;
+    ethereum?: unknown;
   }
 }

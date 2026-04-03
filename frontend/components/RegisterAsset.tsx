@@ -1,135 +1,121 @@
 "use client";
 
 import { useState } from "react";
-import { getSigner, getContracts } from "../lib/contracts";
-import { getOrCreateFhevmInstance, encryptAmount } from "../lib/fhevm";
+import { getContracts, getSigner } from "../lib/contracts";
+import { normalizeError } from "../lib/errors";
+import { parseUsdToMicro } from "../lib/format";
+import { encryptAmount, getOrCreateFhevmInstance } from "../lib/fhevm";
 
-const ASSET_TYPES = ["TREASURY_BOND", "INVOICE", "REAL_ESTATE", "EQUITY"] as const;
+const ASSET_TYPES = ["Treasury Bond", "Invoice", "Real Estate", "Equity"] as const;
 
-export default function RegisterAsset() {
-  const [assetType, setAssetType] = useState<number>(0);
+interface RegisterAssetProps {
+  onSuccess?: () => void;
+}
+
+export default function RegisterAsset({ onSuccess }: RegisterAssetProps) {
+  const [assetType, setAssetType] = useState(0);
   const [faceValue, setFaceValue] = useState("");
   const [metadataURI, setMetadataURI] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [registeredAssetId, setRegisteredAssetId] = useState<bigint | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
     setIsLoading(true);
     setError(null);
     setRegisteredAssetId(null);
 
     try {
+      if (!metadataURI.trim()) {
+        throw new Error("Enter a metadata URI for this collateral.");
+      }
+
       const { signer, address } = await getSigner();
       const contracts = getContracts(signer);
       const inst = await getOrCreateFhevmInstance();
+      const faceValueMicro = parseUsdToMicro(faceValue);
+      const registryAddress = await contracts.rwaRegistry.getAddress();
 
-      const faceValueMicro = BigInt(Math.round(parseFloat(faceValue) * 1_000_000));
-      const { handle, inputProof } = await encryptAmount(
-        inst,
-        await contracts.rwaRegistry.getAddress(),
-        address,
-        faceValueMicro,
-      );
-
-      const tx = await contracts.rwaRegistry.registerAsset(handle, inputProof, assetType, metadataURI);
+      const { handle, inputProof } = await encryptAmount(inst, registryAddress, address, faceValueMicro);
+      const tx = await contracts.rwaRegistry.registerAsset(handle, inputProof, assetType, metadataURI.trim());
       const receipt = await tx.wait();
-
-      const event = receipt?.logs?.find(
-        (log: { fragment?: { name: string } }) => log?.fragment?.name === "AssetRegistered",
+      const eventLog = receipt?.logs.find(
+        (log: { fragment?: { name?: string } }) => log.fragment?.name === "AssetRegistered",
       );
-      const assetId = (event as { args?: [bigint] })?.args?.[0] ?? BigInt(0);
-      setRegisteredAssetId(assetId);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Transaction failed");
+
+      setRegisteredAssetId((eventLog as { args?: [bigint] })?.args?.[0] ?? null);
+      onSuccess?.();
+    } catch (nextError: unknown) {
+      setError(normalizeError(nextError));
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="w-full max-w-lg rounded-xl border border-gray-800 bg-gray-900 p-6">
-      <h2 className="mb-2 text-xl font-bold text-white">Register RWA Asset</h2>
-      <p className="mb-6 flex items-center gap-1 text-sm text-indigo-300">
-        <span>🔒</span> Face value encrypted — never appears onchain in plaintext
+    <section className="rounded-3xl border border-white/10 bg-slate-950/70 p-6">
+      <h3 className="text-lg font-semibold text-white">Register collateral</h3>
+      <p className="mt-2 text-sm text-slate-400">
+        Submit a live RWA position to the registry. The face value is encrypted before it reaches the
+        contract.
       </p>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="mt-5 space-y-4">
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-300">Asset Type</label>
+          <label className="mb-2 block text-sm text-slate-300">Asset type</label>
           <select
             value={assetType}
-            onChange={(e) => setAssetType(Number(e.target.value))}
-            className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            onChange={(event) => setAssetType(Number(event.target.value))}
+            className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400"
           >
-            {ASSET_TYPES.map((type, idx) => (
-              <option key={type} value={idx}>
-                {type.replace("_", " ")}
+            {ASSET_TYPES.map((type, index) => (
+              <option key={type} value={index}>
+                {type}
               </option>
             ))}
           </select>
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-300">Face Value (USD)</label>
+          <label className="mb-2 block text-sm text-slate-300">Face value (USD)</label>
           <input
             type="number"
-            value={faceValue}
-            onChange={(e) => setFaceValue(e.target.value)}
-            placeholder="e.g. 10000"
-            min="1"
+            min="0.01"
             step="0.01"
-            required
-            className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            value={faceValue}
+            onChange={(event) => setFaceValue(event.target.value)}
+            placeholder="250000"
+            className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-300">Metadata URI</label>
+          <label className="mb-2 block text-sm text-slate-300">Metadata URI</label>
           <input
             type="text"
             value={metadataURI}
-            onChange={(e) => setMetadataURI(e.target.value)}
-            placeholder="ipfs://Qm..."
+            onChange={(event) => setMetadataURI(event.target.value)}
+            placeholder="ipfs://shieldcredit/example.json"
             required
-            className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400"
           />
         </div>
 
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full rounded-lg bg-gradient-to-r from-indigo-500 to-cyan-500 py-2.5 font-semibold text-white shadow-lg transition-all duration-200 hover:from-indigo-600 hover:to-cyan-600 disabled:opacity-50"
+          className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-slate-200 disabled:opacity-50"
         >
-          {isLoading ? (
-            <span className="flex items-center justify-center gap-2">
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Encrypting & Registering...
-            </span>
-          ) : (
-            "Register Asset"
-          )}
+          {isLoading ? "Registering..." : "Register asset"}
         </button>
       </form>
 
       {registeredAssetId !== null && (
-        <div className="mt-4 rounded-lg border border-green-700 bg-green-900/30 p-4">
-          <p className="font-medium text-green-300">✅ Asset Registered Successfully</p>
-          <p className="mt-1 text-sm text-green-400">
-            Asset ID: <span className="font-mono">{registeredAssetId.toString()}</span>
-          </p>
-        </div>
+        <p className="mt-4 text-sm text-emerald-200">Collateral registered as asset #{registeredAssetId.toString()}.</p>
       )}
 
-      {error && (
-        <div className="mt-4 rounded-lg border border-red-700 bg-red-900/30 p-4">
-          <p className="text-sm text-red-300">❌ {error}</p>
-        </div>
-      )}
-    </div>
+      {error && <p className="mt-4 text-sm text-rose-200">{error}</p>}
+    </section>
   );
 }

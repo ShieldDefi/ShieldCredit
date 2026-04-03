@@ -1,10 +1,11 @@
 "use client";
 
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useEffect, useState } from "react";
-import { useAccount, useDisconnect } from "wagmi";
+import { useEffect, useMemo, useState } from "react";
+import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 import { getSigner } from "../lib/contracts";
-import { getOrCreateFhevmInstance, resetFhevmInstance } from "../lib/fhevm";
+import { normalizeError } from "../lib/errors";
+import { resetFhevmInstance, getOrCreateFhevmInstance } from "../lib/fhevm";
+import { targetChain } from "../lib/wagmi";
 
 interface ConnectWalletProps {
   onConnect?: (address: string) => void;
@@ -12,10 +13,15 @@ interface ConnectWalletProps {
 }
 
 export default function ConnectWallet({ onConnect, onDisconnect }: ConnectWalletProps) {
-  const { address, connector, isConnected } = useAccount();
+  const { address, chainId, connector, isConnected } = useAccount();
+  const { connect, connectors, error: connectError, isPending: isConnecting } = useConnect();
   const { disconnect } = useDisconnect();
+  const { switchChain, isPending: isSwitching } = useSwitchChain();
   const [isPreparing, setIsPreparing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const primaryConnector = useMemo(() => connectors[0] ?? null, [connectors]);
+  const isWrongNetwork = isConnected && chainId !== targetChain.id;
 
   useEffect(() => {
     let cancelled = false;
@@ -30,17 +36,19 @@ export default function ConnectWallet({ onConnect, onDisconnect }: ConnectWallet
 
       setIsPreparing(true);
       setError(null);
+
       try {
         const connectorProvider = await connector?.getProvider?.();
         resetFhevmInstance();
-        const { provider } = await getSigner(connectorProvider);
+        await getSigner(connectorProvider);
         await getOrCreateFhevmInstance(connectorProvider);
+
         if (!cancelled) {
           onConnect?.(address);
         }
-      } catch (err: unknown) {
+      } catch (nextError: unknown) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to initialize wallet");
+          setError(normalizeError(nextError));
         }
       } finally {
         if (!cancelled) {
@@ -56,77 +64,65 @@ export default function ConnectWallet({ onConnect, onDisconnect }: ConnectWallet
     };
   }, [address, connector, isConnected, onConnect, onDisconnect]);
 
-  const truncateAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  useEffect(() => {
+    if (connectError) {
+      setError(normalizeError(connectError));
+    }
+  }, [connectError]);
+
+  const truncatedAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Wallet";
+
+  if (!isConnected) {
+    return (
+      <div className="flex flex-col items-end gap-2">
+        <button
+          onClick={() => {
+            if (primaryConnector) {
+              connect({ connector: primaryConnector });
+            }
+          }}
+          disabled={!primaryConnector || isConnecting || isPreparing}
+          className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isConnecting || isPreparing ? "Connecting..." : "Connect Wallet"}
+        </button>
+        {error && <p className="max-w-xs text-right text-xs text-rose-300">{error}</p>}
+      </div>
+    );
+  }
+
+  if (isWrongNetwork) {
+    return (
+      <div className="flex flex-col items-end gap-2">
+        <button
+          onClick={() => switchChain({ chainId: targetChain.id })}
+          disabled={isSwitching}
+          className="rounded-lg border border-rose-500/50 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-500/20 disabled:opacity-50"
+        >
+          {isSwitching ? "Switching..." : `Switch to ${targetChain.name}`}
+        </button>
+        {error && <p className="max-w-xs text-right text-xs text-rose-300">{error}</p>}
+      </div>
+    );
+  }
 
   return (
-    <ConnectButton.Custom>
-      {({ account, chain, mounted, openAccountModal, openChainModal, openConnectModal }) => {
-        const ready = mounted;
-        const connected = ready && !!account && !!chain;
-
-        return (
-          <div
-            className="flex flex-col items-end gap-1"
-            aria-hidden={!ready}
-            style={{
-              opacity: ready ? 1 : 0,
-              pointerEvents: ready ? "auto" : "none",
-              userSelect: ready ? "auto" : "none",
-            }}
-          >
-            {!connected ? (
-              <button
-                onClick={openConnectModal}
-                disabled={isPreparing}
-                className="rounded-lg bg-gradient-to-r from-indigo-500 to-cyan-500 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition-all duration-200 hover:from-indigo-600 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isPreparing ? (
-                  <span className="flex items-center gap-2">
-                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Connecting...
-                  </span>
-                ) : (
-                  "Connect Wallet"
-                )}
-              </button>
-            ) : chain.unsupported ? (
-              <button
-                onClick={openChainModal}
-                className="rounded-lg border border-red-700 bg-red-900/40 px-4 py-2 text-sm font-semibold text-red-200 transition-colors hover:bg-red-900/60"
-              >
-                Wrong network
-              </button>
-            ) : (
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={openAccountModal}
-                  className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-800 px-4 py-2"
-                >
-                  <div className="h-2 w-2 animate-pulse rounded-full bg-green-400" />
-                  <span className="font-mono text-sm text-gray-200">
-                    {truncateAddress(account.address)}
-                  </span>
-                  <span className="ml-1 text-xs text-gray-500">{chain.name}</span>
-                </button>
-                <button
-                  onClick={() => {
-                    resetFhevmInstance();
-                    disconnect();
-                    onDisconnect?.();
-                  }}
-                  className="rounded border border-gray-700 px-2 py-1 text-xs text-gray-400 transition-colors hover:border-red-800 hover:text-red-400"
-                >
-                  Disconnect
-                </button>
-              </div>
-            )}
-            {error && <p className="text-xs text-red-400">{error}</p>}
-          </div>
-        );
-      }}
-    </ConnectButton.Custom>
+    <div className="flex items-center gap-3">
+      <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-2">
+        <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Wallet</div>
+        <div className="mt-1 font-mono text-sm text-white">{truncatedAddress}</div>
+      </div>
+      <button
+        onClick={() => {
+          resetFhevmInstance();
+          disconnect();
+          onDisconnect?.();
+        }}
+        className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+      >
+        Disconnect
+      </button>
+      {error && <p className="max-w-xs text-right text-xs text-rose-300">{error}</p>}
+    </div>
   );
 }

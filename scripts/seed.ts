@@ -35,13 +35,43 @@ const SEED_ASSETS = [
     assetType: 1,
     faceValue: 420_000_000_000n,
     metadataURI: "ipfs://shieldcredit/enterprise-invoice-batch-a17.json",
-    requestedLoanAmount: null,
+    requestedLoanAmount: 210_000_000_000n,
   },
   {
     assetType: 2,
     faceValue: 2_100_000_000_000n,
     metadataURI: "ipfs://shieldcredit/lagos-logistics-warehouse.json",
     requestedLoanAmount: 1_100_000_000_000n,
+  },
+  {
+    assetType: 3,
+    faceValue: 890_000_000_000n,
+    metadataURI: "ipfs://shieldcredit/energy-grid-equity-tranche-b.json",
+    requestedLoanAmount: 445_000_000_000n,
+  },
+  {
+    assetType: 0,
+    faceValue: 3_800_000_000_000n,
+    metadataURI: "ipfs://shieldcredit/eu-green-bond-2030.json",
+    requestedLoanAmount: 2_400_000_000_000n,
+  },
+  {
+    assetType: 1,
+    faceValue: 610_000_000_000n,
+    metadataURI: "ipfs://shieldcredit/healthcare-claims-batch-q2.json",
+    requestedLoanAmount: 300_000_000_000n,
+  },
+  {
+    assetType: 2,
+    faceValue: 5_400_000_000_000n,
+    metadataURI: "ipfs://shieldcredit/abuja-mixed-use-development.json",
+    requestedLoanAmount: 3_000_000_000_000n,
+  },
+  {
+    assetType: 3,
+    faceValue: 1_350_000_000_000n,
+    metadataURI: "ipfs://shieldcredit/agri-processing-equity-series-c.json",
+    requestedLoanAmount: 675_000_000_000n,
   },
 ] as const;
 
@@ -140,6 +170,14 @@ async function main() {
     await tx.wait();
     console.log(`Seed loan for asset ${assetId} confirmed: ${tx.hash}`);
   }
+
+  const [finalAssetCount, finalBorrowerLoans] = await Promise.all([
+    rwaRegistry.totalAssets(),
+    privateLending.getBorrowerLoans(wallet.address),
+  ]);
+
+  console.log(`Final asset count: ${finalAssetCount.toString()}`);
+  console.log(`Borrower loan count: ${finalBorrowerLoans.length}`);
 }
 
 main().catch((error) => {

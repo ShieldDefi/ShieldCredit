@@ -1,43 +1,44 @@
 "use client";
 
 import { useState } from "react";
+import AccountPanel from "../components/AccountPanel";
 import BrandMark from "../components/BrandMark";
 import ConnectWallet from "../components/ConnectWallet";
-import RegisterAsset from "../components/RegisterAsset";
-import RequestLoan from "../components/RequestLoan";
 import LoanDashboard from "../components/LoanDashboard";
 import RegulatorView from "../components/RegulatorView";
-import StablecoinFaucet from "../components/StablecoinFaucet";
+import RegisterAsset from "../components/RegisterAsset";
+import RequestLoan from "../components/RequestLoan";
 
-type Tab = "dashboard" | "register" | "request" | "faucet" | "regulator";
+type Tab = "protocol" | "account" | "compliance";
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "register", label: "Register Asset" },
-  { id: "request", label: "Request Loan" },
-  { id: "faucet", label: "Faucet" },
-  { id: "regulator", label: "Regulator" },
+const tabs: { id: Tab; label: string }[] = [
+  { id: "protocol", label: "Protocol" },
+  { id: "account", label: "Account" },
+  { id: "compliance", label: "Compliance" },
 ];
 
 export default function HomePage() {
-  const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+  const [activeTab, setActiveTab] = useState<Tab>("protocol");
   const [connectedAddress, setConnectedAddress] = useState<string | null>(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+
+  const triggerRefresh = () => setRefreshVersion((value) => value + 1);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-indigo-950 to-gray-950 text-white">
-      <header className="sticky top-0 z-10 border-b border-gray-800/50 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#1e293b_0%,#0f172a_38%,#020617_100%)] text-white">
+      <header className="border-b border-white/10 bg-slate-950/70 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
-            <BrandMark size={36} className="h-9 w-9" />
+            <BrandMark size={40} className="h-10 w-10" />
             <div>
-              <h1 className="text-lg font-bold leading-none">ShieldCredit</h1>
-              <p className="mt-0.5 text-xs leading-none text-gray-400">
-                Confidential RWA-Backed Lending · Powered by Zama fhEVM
-              </p>
+              <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">ShieldCredit</p>
+              <h1 className="mt-1 text-xl font-semibold text-white">
+                Confidential RWA-backed lending on Sepolia
+              </h1>
             </div>
           </div>
           <ConnectWallet
-            onConnect={(addr) => setConnectedAddress(addr)}
+            onConnect={(address) => setConnectedAddress(address)}
             onDisconnect={() => setConnectedAddress(null)}
           />
         </div>
@@ -45,44 +46,32 @@ export default function HomePage() {
 
       <main className="mx-auto max-w-7xl px-4 py-8">
         {!connectedAddress ? (
-          <div className="flex min-h-[70vh] flex-col items-center justify-center text-center">
-            <div className="mb-6 rounded-[28px] border border-cyan-400/10 bg-gray-900/70 p-3 shadow-2xl shadow-cyan-500/10">
-              <BrandMark size={64} className="h-16 w-16" />
-            </div>
-            <h2 className="mb-4 bg-gradient-to-r from-indigo-300 to-cyan-300 bg-clip-text text-4xl font-extrabold text-transparent md:text-5xl">
-              Private Lending for Real-World Assets
-            </h2>
-            <p className="mb-8 max-w-2xl text-lg leading-relaxed text-gray-400">
-              ShieldCredit enables institutions to collateralize real-world assets — bonds, invoices, real estate — and
-              borrow stablecoins with fully encrypted loan terms. Powered by Zama&apos;s fhEVM, your financial data stays
-              private on-chain.
-            </p>
-            <div className="mb-10 grid w-full max-w-2xl grid-cols-1 gap-4 text-sm md:grid-cols-3">
-              {[
-                { icon: "🔐", title: "Encrypted Balances", desc: "Face values and loan amounts never appear in plaintext" },
-                { icon: "🏦", title: "RWA Collateral", desc: "Treasury bonds, invoices, real estate, equity" },
-                { icon: "🎯", title: "Selective Disclosure", desc: "Only you and your regulator can decrypt loan details" },
-              ].map((feature) => (
-                <div key={feature.title} className="rounded-xl border border-gray-800 bg-gray-900/50 p-4 text-left">
-                  <div className="mb-2 text-2xl">{feature.icon}</div>
-                  <div className="mb-1 font-semibold text-white">{feature.title}</div>
-                  <div className="text-xs text-gray-400">{feature.desc}</div>
-                </div>
-              ))}
-            </div>
-            <p className="text-sm text-gray-500">Connect your wallet to start →</p>
+          <div className="space-y-8">
+            <section className="rounded-3xl border border-white/10 bg-slate-950/70 p-8 text-center shadow-[0_24px_80px_rgba(15,23,42,0.45)]">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-white/10 bg-white/5">
+                <BrandMark size={36} className="h-9 w-9" />
+              </div>
+              <h2 className="mt-6 text-4xl font-semibold text-white">Live confidential credit, no mock data</h2>
+              <p className="mx-auto mt-4 max-w-3xl text-base leading-7 text-slate-400">
+                View the seeded Sepolia protocol state now, then connect a wallet to register
+                collateral, request loans, mint sUSD from the deployed faucet, and decrypt your own
+                positions.
+              </p>
+            </section>
+
+            <LoanDashboard refreshVersion={refreshVersion} />
           </div>
         ) : (
-          <div>
-            <div className="mb-8 flex w-fit gap-1 rounded-xl border border-gray-800 bg-gray-900/50 p-1">
-              {TABS.map((tab) => (
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-2 rounded-2xl border border-white/10 bg-slate-950/60 p-2">
+              {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 ${
+                  className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
                     activeTab === tab.id
-                      ? "bg-gradient-to-r from-indigo-500 to-cyan-500 text-white shadow-lg"
-                      : "text-gray-400 hover:text-white"
+                      ? "bg-white text-slate-950"
+                      : "text-slate-300 hover:bg-white/5 hover:text-white"
                   }`}
                 >
                   {tab.label}
@@ -90,13 +79,21 @@ export default function HomePage() {
               ))}
             </div>
 
-            <div className="flex justify-center">
-              {activeTab === "dashboard" && <LoanDashboard />}
-              {activeTab === "register" && <RegisterAsset />}
-              {activeTab === "request" && <RequestLoan />}
-              {activeTab === "faucet" && <StablecoinFaucet />}
-              {activeTab === "regulator" && <RegulatorView />}
-            </div>
+            {activeTab === "protocol" && (
+              <div className="space-y-6">
+                <LoanDashboard refreshVersion={refreshVersion} />
+                <div className="grid gap-6 xl:grid-cols-2">
+                  <RegisterAsset onSuccess={triggerRefresh} />
+                  <RequestLoan onSuccess={triggerRefresh} />
+                </div>
+              </div>
+            )}
+
+            {activeTab === "account" && (
+              <AccountPanel connectedAddress={connectedAddress} refreshVersion={refreshVersion} />
+            )}
+
+            {activeTab === "compliance" && <RegulatorView />}
           </div>
         )}
       </main>

@@ -1,34 +1,18 @@
-import { getDefaultConfig } from "@rainbow-me/rainbowkit";
-import {
-  coinbaseWallet,
-  injectedWallet,
-  walletConnectWallet,
-} from "@rainbow-me/rainbowkit/wallets";
-import { getAccount } from "@wagmi/core";
-import { http } from "wagmi";
-import { sepolia } from "wagmi/chains";
+import { getAccount, injected } from "@wagmi/core";
+import { createConfig, http } from "wagmi";
+import { protocolConfig } from "./protocol-config";
 
-export const targetChain = sepolia;
+export const targetChain = protocolConfig.chain;
 
-const walletConnectProjectId =
-  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "shieldcredit-local-dev";
-
-const rpcUrl = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || targetChain.rpcUrls.default.http[0];
-
-const wallets = [
-  {
-    groupName: "Recommended",
-    wallets: [injectedWallet, walletConnectWallet, coinbaseWallet],
-  },
-];
-
-export const wagmiConfig = getDefaultConfig({
-  appName: "ShieldCredit",
-  projectId: walletConnectProjectId,
+export const wagmiConfig = createConfig({
   chains: [targetChain],
-  wallets,
+  connectors: [
+    injected({
+      shimDisconnect: true,
+    }),
+  ],
   transports: {
-    [targetChain.id]: http(rpcUrl),
+    [targetChain.id]: http(protocolConfig.rpcUrl),
   },
   ssr: true,
 });

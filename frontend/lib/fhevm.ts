@@ -1,5 +1,6 @@
 import { hexlify, toBeHex, zeroPadValue } from "ethers";
 import type { JsonRpcSigner } from "ethers";
+import { protocolConfig } from "./protocol-config";
 import { getActiveWalletProvider } from "./wagmi";
 
 type DecryptSigner = JsonRpcSigner | {
@@ -28,8 +29,8 @@ async function ensureSdkReady() {
 }
 
 function relayerAuth() {
-  return process.env.NEXT_PUBLIC_ZAMA_RELAYER_API_KEY
-    ? { __type: "ApiKeyHeader" as const, value: process.env.NEXT_PUBLIC_ZAMA_RELAYER_API_KEY }
+  return protocolConfig.relayerApiKey
+    ? { __type: "ApiKeyHeader" as const, value: protocolConfig.relayerApiKey }
     : undefined;
 }
 
@@ -46,8 +47,8 @@ function normalizeHandle(handle: bigint | string) {
 }
 
 async function resolveRelayerNetwork(providerLike?: unknown) {
-  if (process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL) {
-    return process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL;
+  if (protocolConfig.rpcUrl) {
+    return protocolConfig.rpcUrl;
   }
 
   return (providerLike ?? await getActiveWalletProvider()) as any;
